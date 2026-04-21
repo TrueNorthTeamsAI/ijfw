@@ -3,7 +3,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, rmSync, mkdirSync, realpathSync, renameSync } from 'node:fs';
-import { resolve, join } from 'node:path';
+import { resolve, join, dirname } from 'node:path';
 import { homedir, platform } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { mergeMarketplace, claudeSettingsPath } from './marketplace.js';
@@ -63,14 +63,30 @@ function preflight() {
   const issues = [];
   const [major] = process.versions.node.split('.').map(Number);
   if (major < 18) issues.push(`IJFW needs Node >=18 -- current: ${process.versions.node}. Upgrade Node, then retry.`);
-  if (!hasBin('git')) issues.push('IJFW needs git on PATH -- install git (https://git-scm.com), then retry.');
-  // Windows-native (no Git Bash, no WSL) -- point the user at the PS entry
-  // point instead of failing with "install bash". Git for Windows ships
-  // bash.exe, so most Windows users pass the bash check; this branch only
-  // fires if git is installed via a non-bash path.
-  if (!hasBin('bash')) {
+  if (!hasBin('git')) {
     if (platform() === 'win32') {
-      issues.push('IJFW on Windows needs Git Bash. Install Git for Windows (https://git-scm.com/download/win), or run the PowerShell installer: irm https://raw.githubusercontent.com/TheRealSeanDonahoe/ijfw/main/installer/src/install.ps1 | iex');
+      issues.push(
+        'IJFW needs Git for Windows (it bundles git + bash). One command:\n' +
+        '    winget install --id Git.Git -e --source winget --accept-source-agreements --accept-package-agreements\n' +
+        '  Then close this PowerShell window, open a fresh one, and rerun:\n' +
+        '    npx -p @ijfw/install ijfw-install'
+      );
+    } else {
+      issues.push('IJFW needs git on PATH -- install git (https://git-scm.com), then retry.');
+    }
+  }
+  // Resolve bash (Git for Windows ships bash.exe but often does not add it to
+  // PATH, so hasBin('bash') returns false on a perfectly-functional install).
+  // findBash() walks git.exe's siblings to find it -- matches install.ps1's
+  // Resolve-GitBash logic so both entry points agree on what "installed" means.
+  if (!findBash()) {
+    if (platform() === 'win32') {
+      issues.push(
+        'IJFW could not locate bash.exe. Git for Windows installs it at\n' +
+        '    C:\\Program Files\\Git\\bin\\bash.exe\n' +
+        '  If you installed Git elsewhere, add its bin\\ to PATH and rerun.\n' +
+        '  Missing Git entirely? winget install --id Git.Git -e --source winget'
+      );
     } else {
       issues.push('IJFW needs bash on PATH -- install bash, then retry.');
     }
@@ -81,6 +97,46 @@ function preflight() {
 function hasBin(bin) {
   const res = spawnSync(bin, ['--version'], { stdio: 'ignore' });
   return res.status === 0 || res.status === null ? (res.error ? false : true) : false;
+}
+
+// Resolve a usable bash. Returns an absolute path (Windows) or "bash" (POSIX
+// where PATH is reliable). Returns null if nothing works.
+// On Windows, Git for Windows ships bash.exe alongside git.exe -- we walk
+// from `where git` to find it, then fall back to the Program Files defaults.
+// This mirrors install.ps1's Resolve-GitBash so both entry points agree.
+export function findBash() {
+  if (hasBin('bash') && platform() !== 'win32') return 'bash';
+  if (platform() !== 'win32') return hasBin('bash') ? 'bash' : null;
+
+  // Windows: derive bash.exe from git.exe's install root.
+  const whereGit = spawnSync('where', ['git'], { encoding: 'utf8' });
+  if (whereGit.status === 0) {
+    const gitPath = (whereGit.stdout || '').split(/\r?\n/)[0].trim();
+    if (gitPath && existsSync(gitPath)) {
+      const gitDir = dirname(gitPath);           // ...\Git\cmd  or  ...\Git\bin
+      const gitRoot = dirname(gitDir);           // ...\Git
+      const candidates = [
+        join(gitDir, 'bash.exe'),
+        join(gitRoot, 'bin', 'bash.exe'),
+        join(gitRoot, 'usr', 'bin', 'bash.exe'),
+      ];
+      for (const c of candidates) if (existsSync(c)) return c;
+    }
+  }
+  // Well-known Program Files paths (covers installs where git isn't on PATH
+  // either, so `where git` returns nothing -- rare but real, happens with
+  // per-user installs invoked from a shell that didn't pick up the update).
+  for (const c of [
+    'C:\\Program Files\\Git\\bin\\bash.exe',
+    'C:\\Program Files\\Git\\usr\\bin\\bash.exe',
+    'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
+    'C:\\Program Files (x86)\\Git\\usr\\bin\\bash.exe',
+  ]) if (existsSync(c)) return c;
+
+  // Last resort: bare "bash" on PATH (works if the user added Git\bin
+  // manually, or on Windows boxes with bash shipping via other means).
+  if (hasBin('bash')) return 'bash';
+  return null;
 }
 
 function resolveTarget(opt) {
@@ -154,7 +210,11 @@ function runInstallScript(dir) {
     IJFW_HOME: dir,
     IJFW_CUSTOM_DIR: isCustomDir,
   };
-  const r = spawnSync('bash', ['scripts/install.sh'], { cwd: dir, stdio: 'inherit', env });
+  const bashExe = findBash();
+  if (!bashExe) {
+    throw new Error('IJFW could not locate bash (preflight should have caught this -- file an issue).');
+  }
+  const r = spawnSync(bashExe, ['scripts/install.sh'], { cwd: dir, stdio: 'inherit', env });
   if (r.status !== 0) throw new Error(`IJFW platform config step did not complete (exit ${r.status}) -- run ijfw doctor to see what to fix.`);
 }
 

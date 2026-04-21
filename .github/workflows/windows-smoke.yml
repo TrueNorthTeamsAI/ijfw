@@ -1,0 +1,91 @@
+name: Windows smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request: {}
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  windows-smoke:
+    name: Windows smoke
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [default-path, stripped-path]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+          cache-dependency-path: installer/package-lock.json
+
+      - name: Show pre-flight tools
+        shell: pwsh
+        run: |
+          Write-Host "git --version:"; git --version
+          Write-Host "where git:"; where.exe git
+          Write-Host "bash on PATH?:"; (Get-Command bash -ErrorAction SilentlyContinue) -ne $null
+
+      - name: Install installer deps
+        working-directory: installer
+        run: npm ci
+
+      - name: Build installer
+        working-directory: installer
+        run: npm run build
+
+      - name: Strip Git bin dirs from PATH (stripped-path mode only)
+        if: matrix.mode == 'stripped-path'
+        shell: pwsh
+        run: |
+          $filtered = ($env:PATH -split ';') | Where-Object {
+            $_ -notmatch 'Git\\bin$' -and $_ -notmatch 'Git\\usr\\bin$'
+          }
+          "PATH=$($filtered -join ';')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "bash on PATH after strip?:"; (Get-Command bash -ErrorAction SilentlyContinue) -ne $null
+
+      - name: findBash resolves
+        working-directory: installer
+        shell: pwsh
+        run: |
+          node --input-type=module -e "import('./src/install.js').then(m => { const p = m.findBash(); console.log('findBash() =>', p); process.exit(p ? 0 : 1); })"
+
+      - name: Installer clones repo and runs scripts/install.sh in scratch
+        shell: pwsh
+        env:
+          IJFW_NONINTERACTIVE: '1'
+          SCRATCH_ROOT: ${{ runner.temp }}
+        run: |
+          $scratch = Join-Path $env:SCRATCH_ROOT 'ijfw-scratch'
+          New-Item -ItemType Directory -Force -Path $scratch | Out-Null
+          node installer/dist/install.js --dir $scratch --branch main --no-marketplace
+          if ($LASTEXITCODE -ne 0) { throw "installer exited $LASTEXITCODE" }
+
+      - name: Verify expected files landed
+        shell: pwsh
+        env:
+          SCRATCH_ROOT: ${{ runner.temp }}
+        run: |
+          $scratch = Join-Path $env:SCRATCH_ROOT 'ijfw-scratch'
+          $expected = @(
+            (Join-Path $scratch 'scripts\install.sh'),
+            (Join-Path $scratch 'installer\package.json'),
+            (Join-Path $scratch 'mcp-server\package.json'),
+            (Join-Path $scratch 'codex\.codex\hooks.json'),
+            (Join-Path $scratch 'hermes\HERMES.md'),
+            (Join-Path $scratch 'wayland\WAYLAND.md')
+          )
+          $missing = @()
+          foreach ($p in $expected) { if (-not (Test-Path $p)) { $missing += $p } }
+          if ($missing.Count -gt 0) {
+            Write-Error ("Missing expected files after install:`n" + ($missing -join "`n"))
+            exit 1
+          }
+          Write-Host "[PASS] all expected files present"

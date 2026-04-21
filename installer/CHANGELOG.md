@@ -1,5 +1,29 @@
 # Changelog -- @ijfw/install
 
+## [1.1.3] -- 2026-04-21
+
+Windows "it just works" fix + Windows CI gate.
+
+### Windows npx path finally works
+
+- **`install.js` now resolves `bash.exe` via `git.exe`'s install root** instead of requiring `bash` on PATH. Git for Windows installs `bash.exe` at `C:\Program Files\Git\bin\bash.exe` but by default does **not** add that dir to PATH, so the previous `hasBin('bash')` preflight always failed -- even on a perfectly-functional Git for Windows install. New `findBash()` helper mirrors `install.ps1`'s `Resolve-GitBash`: walks `where git` output to find the sibling bash.exe, falls back to `Program Files\Git\{bin,usr/bin}\bash.exe`, and only errors if nothing lands.
+- `runInstallScript` now calls the resolved `bash.exe` path directly instead of bare `"bash"`, so the child process spawns cleanly on Windows without PATH manipulation.
+- Error message when git is missing on Windows now leads with a single `winget install --id Git.Git` command, drops the PS1 `irm | iex` fallback (Windows Defender heuristically blocks that pattern), and tells the user to reopen PowerShell before rerunning so the PATH refresh picks up.
+- Error message when git is present but bash.exe cannot be located points at the expected path and gives a one-line remediation.
+
+### Windows CI gate (new)
+
+- `.github/workflows/windows-smoke.yml`. Runs on every push and PR on `windows-latest`. Checks: install.js loads, `findBash()` returns a live path, installer clones + runs `scripts/install.sh` against a scratch IJFW_HOME with `IJFW_CUSTOM_DIR=1`, writes the expected files. Catches the 1.1.2 regression at source -- a Windows publish that would have shipped a broken `npx` entry point now fails CI before it reaches main.
+
+### Internal
+
+- `mcp-server/package.json` bumped 1.1.2 -> 1.1.3 to stay in lockstep with the installer.
+
+### Notes for upgraders
+
+- No behavioral change for macOS or Linux users. `findBash()` returns `"bash"` on non-Windows hosts where PATH is reliable.
+- No config-schema changes. `~/.codex/hooks.json` stays on the 1.1.2 nested map schema.
+
 ## [1.1.2] -- 2026-04-21
 
 Reach + bug fixes. Two new platforms (Hermes + Wayland), deep installer repairs uncovered by live-platform testing, cross-platform sync of new behavioral rules. Ships with a full end-to-end smoke harness at `scripts/e2e-smoke.sh` that now has to pass before any future release.
