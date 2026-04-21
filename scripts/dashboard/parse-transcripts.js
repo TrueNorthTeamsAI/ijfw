@@ -372,7 +372,7 @@ if (forceAll) {
   const reparsePaths = new Set(toProcess.map(f => f.path));
   for (const proj of Object.values(projects)) {
     proj.sessions = proj.sessions.filter(s => {
-      // Match by filename — find the original file path
+      // Match by filename -- find the original file path
       const match = toProcess.find(f => basename(f.path) === s.file);
       return !match; // keep sessions not being reparsed
     });

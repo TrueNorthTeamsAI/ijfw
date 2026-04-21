@@ -547,10 +547,10 @@ Yes. `.ijfw/team/` is git-committed by default. Decisions, patterns, and stack c
 
 <p align="center">
 <a href="https://github.com/TheRealSeanDonahoe/ijfw">github.com/TheRealSeanDonahoe/ijfw</a>
-&nbsp;·&nbsp;
+&nbsp;|&nbsp;
 <a href="https://www.npmjs.com/package/@ijfw/install">npm</a>
-&nbsp;·&nbsp;
+&nbsp;|&nbsp;
 <a href="../NO_TELEMETRY.md">Privacy</a>
-&nbsp;·&nbsp;
+&nbsp;|&nbsp;
 <a href="../CHANGELOG.md">Changelog</a>
 </p>

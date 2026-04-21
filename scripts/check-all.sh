@@ -26,7 +26,7 @@ TARGETS=(
 HITS=0
 for t in "${TARGETS[@]}"; do
   [ -e "$t" ] || continue
-  if matches=$(LC_ALL=C grep -RnE $'\302\247|\342\224\201|\342\200\224|\316\224|\303\227|\342\210\222|\342\234\223|\342\234\224|\302\267' "$t" 2>/dev/null); then
+  if matches=$(LC_ALL=C grep -RInE $'\302\247|\342\224\201|\342\200\224|\316\224|\303\227|\342\210\222|\342\234\223|\342\234\224|\302\267' "$t" 2>/dev/null); then
     if [ -n "$matches" ]; then
       echo "$matches" >&2
       HITS=$((HITS + 1))

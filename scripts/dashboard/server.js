@@ -86,7 +86,7 @@ function parseRegistry() {
     .filter(r => r.path);
 }
 
-// Find the cost-data JSON — use the most recent one
+// Find the cost-data JSON -- use the most recent one
 function findCodburn() {
   if (!existsSync(IJFW_GLOBAL)) return null;
   const files = readdirSync(IJFW_GLOBAL)
@@ -252,7 +252,7 @@ function buildAllMemory() {
     }
   }
 
-  // Claude native memory — all .md files in ~/.claude/projects/*/memory/
+  // Claude native memory -- all .md files in ~/.claude/projects/*/memory/
   const claudeProjectsDir = join(HOME, '.claude', 'projects');
   if (existsSync(claudeProjectsDir)) {
     try {
@@ -720,7 +720,7 @@ function buildApiData() {
   // --- Gemini data ---
   const geminiData = readGeminiData();
 
-  // --- "Today by project" — prefer today-period breakdown, fallback 30d, then registry ---
+  // --- "Today by project" -- prefer today-period breakdown, fallback 30d, then registry ---
   const codeburnProjects = codeburn?.projects ?? [];
   const todayProjects = cbToday?.projects ?? [];
   const todayByProjectRaw = (todayProjects.length > 0 ? todayProjects : codeburnProjects).length > 0
@@ -779,7 +779,7 @@ function buildApiData() {
       allSessions.push({ ...sess, project: projName, type });
     }
   }
-  // Filter out empty sessions (0 tokens, no model — aborted or cleared sessions)
+  // Filter out empty sessions (0 tokens, no model -- aborted or cleared sessions)
   const liveSessions = allSessions.filter(s => s.outputTokens > 0 || s.inputTokens > 0);
   liveSessions.sort((a, b) => (b.startTime || '').localeCompare(a.startTime || ''));
 
@@ -855,7 +855,7 @@ const BRAINSTORM_DARK_WRAPPER = (title, navLinks, body, autoRefresh) => `<!DOCTY
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 ${autoRefresh ? '<meta http-equiv="refresh" content="2">' : ''}
-<title>IJFW Brainstorm${title ? ' — ' + title : ''}</title>
+<title>IJFW Brainstorm${title ? ' -- ' + title : ''}</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root { --bg: #0d1117; --surface: #161b22; --border: #30363d; --text: #c9d1d9; --muted: #8b949e; --accent: #58a6ff; }
@@ -984,7 +984,7 @@ const server = createServer((req, res) => {
     let destroyed = false;
     req.on('data', chunk => {
       body += chunk;
-      if (body.length > 100_000) { // 100KB limit — config is tiny
+      if (body.length > 100_000) { // 100KB limit -- config is tiny
         destroyed = true;
         res.writeHead(413, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'request body too large' }));
@@ -1053,7 +1053,7 @@ const server = createServer((req, res) => {
       }
     }
 
-    // ?path= — must start with ~/.claude/projects/ or a registered project path
+    // ?path= -- must start with ~/.claude/projects/ or a registered project path
     // SECURITY: reject path traversal, canonicalize before prefix check
     if (filePath) {
       // Defense in depth: reject .. segments before any filesystem call
@@ -1090,7 +1090,7 @@ const server = createServer((req, res) => {
       return;
     }
 
-    // ?name= — search across all project .ijfw/memory/ dirs
+    // ?name= -- search across all project .ijfw/memory/ dirs
     if (name) {
       const allMem = buildAllMemory();
       const mf = allMem.find(f => f.name === name);
@@ -1144,7 +1144,7 @@ const server = createServer((req, res) => {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
         res.end(withRefresh);
       } else {
-        // Fragment — wrap in dark themed shell
+        // Fragment -- wrap in dark themed shell
         const navLinks = files.map((f, i) =>
           `<a href="/brainstorm?file=${encodeURIComponent(f)}" class="${i === 0 ? 'active' : ''}">${f}</a>`
         ).join('\n');

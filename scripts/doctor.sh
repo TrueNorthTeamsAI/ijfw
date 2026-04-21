@@ -2,7 +2,7 @@
 # IJFW doctor -- user-facing health check. Wraps existing check-*.sh dev
 # scripts in human-friendly, positive-framed output.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 ok()   { printf "  [ok] %s\n" "$1"; }
 info() { printf "  -- %s\n" "$1"; }

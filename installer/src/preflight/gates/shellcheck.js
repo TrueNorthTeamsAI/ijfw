@@ -47,7 +47,11 @@ export async function run(ctx) {
     };
   }
 
-  const res = spawnSync('shellcheck', ['--enable=all', '--disable=SC2312', ...files], {
+  // Severity=warning blocks on genuine bugs (SC2164 cd-failure, SC2086 word-
+  // split, SC2154 unbound-var, etc.) but skips style/info noise. Enabled rules
+  // and ignores are configured per-repo via .shellcheckrc so the gate stays
+  // policy-free.
+  const res = spawnSync('shellcheck', ['--severity=warning', ...files], {
     encoding: 'utf8',
     cwd: ctx.repoRoot,
   });

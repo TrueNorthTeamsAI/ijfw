@@ -11,7 +11,7 @@
 # This is the executable enforcement of P22 -- Standards Encoded.
 
 set -u
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 # Phrases that are NEVER acceptable in user-facing output. The agent/skill
 # files contain INSTRUCTIONS that may legitimately discuss errors -- those are

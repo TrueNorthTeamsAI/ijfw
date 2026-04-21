@@ -33,8 +33,8 @@ const INTENTS = [
   {
     intent: 'project-scale',
     skill:  'ijfw-workflow',
-    priority: 7,  // Just below brainstorm — scale detection is a fallback for non-keyword matches
-    patterns: [], // no keyword patterns — uses check() instead
+    priority: 7,  // Just below brainstorm -- scale detection is a fallback for non-keyword matches
+    patterns: [], // no keyword patterns -- uses check() instead
     check: (prompt) => {
       const words = prompt.split(/\s+/).length;
       const hasMultipleDeliverables = (prompt.match(/\band\b/gi) || []).length >= 2;

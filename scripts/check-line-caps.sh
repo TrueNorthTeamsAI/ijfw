@@ -6,7 +6,7 @@
 # Run: bash scripts/check-line-caps.sh
 
 set -u
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 # Format: <file>:<max-lines>:<reason>
 CAPS=(
