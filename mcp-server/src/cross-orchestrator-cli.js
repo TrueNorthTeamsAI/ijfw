@@ -80,6 +80,10 @@ function parseArgs(argv) {
     return { cmd: 'help' };
   }
 
+  if (args[0] === 'help') {
+    return { cmd: 'guide', browser: args.includes('--browser') };
+  }
+
   if (args[0] === 'status') {
     return { cmd: 'status' };
   }
@@ -855,10 +859,76 @@ function redact(s) {
 }
 
 // ---------------------------------------------------------------------------
+// ijfw help -- open the full guide (terminal paged or rendered HTML)
+// ---------------------------------------------------------------------------
+async function handleGuide(useBrowser) {
+  const __dir = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    resolve(__dir, '..', '..', 'docs', 'GUIDE.md'),
+    resolve(__dir, '..', '..', '..', 'docs', 'GUIDE.md'),
+    join(homedir(), '.ijfw', 'docs', 'GUIDE.md'),
+  ];
+  const guidePath = candidates.find(p => existsSync(p));
+  if (!guidePath) {
+    console.error('[ijfw] Guide not found. Visit https://github.com/TheRealSeanDonahoe/ijfw/blob/main/docs/GUIDE.md');
+    process.exit(1);
+  }
+  const md = readFileSync(guidePath, 'utf8');
+
+  if (useBrowser) {
+    const outDir = join(homedir(), '.ijfw', 'guide');
+    mkdirSync(outDir, { recursive: true });
+    const outFile = join(outDir, 'index.html');
+    const esc = md.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<title>IJFW Guide</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@5.5.1/github-markdown-dark.min.css">
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"><\/script>
+<style>
+body{background:#0d1117;color:#c9d1d9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:2rem}
+.markdown-body{max-width:1000px;margin:0 auto;padding:2.5rem 3rem;background:#161b22;border-radius:12px;border:1px solid #30363d}
+img{max-width:100%;border-radius:8px}
+.brand{position:fixed;top:1rem;right:1.25rem;font-size:0.8rem;color:#8b949e;font-family:'SF Mono',Menlo,monospace}
+</style></head>
+<body>
+<div class="brand">ijfw help --browser</div>
+<article class="markdown-body" id="content"></article>
+<script>
+// Trusted source: GUIDE.md is shipped with IJFW; no user input in this path.
+const md = \`${esc}\`;
+const host = document.getElementById('content');
+const range = document.createRange();
+range.selectNodeContents(host);
+host.appendChild(range.createContextualFragment(marked.parse(md)));
+<\/script></body></html>`;
+    writeFileSync(outFile, html);
+    const opener = process.platform === 'darwin' ? 'open'
+                 : process.platform === 'win32'  ? 'start'
+                 : 'xdg-open';
+    spawnSync(opener, [outFile], { stdio: 'ignore', detached: true });
+    console.log(`[ijfw] Guide rendered to ${outFile}`);
+    return;
+  }
+
+  // Terminal: pipe through less -R when available + interactive, else cat.
+  const lessAvailable = spawnSync('less', ['--version'], { stdio: 'ignore' }).status === 0;
+  if (lessAvailable && process.stdout.isTTY) {
+    spawnSync('less', ['-R'], { input: md, stdio: ['pipe', 'inherit', 'inherit'] });
+  } else {
+    process.stdout.write(md);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
 const parsed = parseArgs(process.argv);
+
+if (parsed.cmd === 'guide') {
+  await handleGuide(parsed.browser);
+  process.exit(0);
+}
 
 if (parsed.cmd === 'help') {
   printUsage();

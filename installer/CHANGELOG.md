@@ -1,5 +1,41 @@
 # Changelog -- @ijfw/install
 
+## [1.1.4] -- 2026-04-21
+
+Announcement-ready polish. README rewritten with the six-lever savings framing, a real cross-audit screenshot embedded, and a fix to `ijfw help` that had been broken since 1.1.1.
+
+### README overhaul
+
+- Hero: "Eight AI coding agents" (was six), full platform list including Hermes + Wayland, "One command to install" (was "Three seconds").
+- Install example box: LIVE NOW (6) + STANDING BY (2) = 8 platforms, matching the new default target set.
+- Token-economy engine replaces the single "25%+ output reduction" claim with a six-row table showing every compounding cost lever and its source: prompt cache (90% off, Anthropic-posted), smart routing (5-25x across Haiku/Sonnet/Opus sub-agent tiers), output discipline (20-40%), skill hot-load (55-line core + 19 lazy skills), memory recall (one MCP call vs 10-20 grep tool-uses), compression (40-50% on handoffs + memory artifacts). Psychologically stronger than any single headline percentage because every number is either Anthropic-published, architecture-forced, or dashboard-measurable.
+- Multi-AI Trident section now embeds a real cross-audit screenshot from a shipping project (Bangkok Big Bike V1): Codex + Gemini + Claude local audits reconciled into 30 consolidated findings, 18 in scope, 3 specialist swarms landed all 18 fixes, final gauntlet passed (typecheck + 57/57 unit + 84/84 Playwright). One model's blind spot never reaches production alone.
+- FAQ savings answer rewritten to reference the six-lever table.
+- Footer tagline: "one install, eight platforms" (was "six").
+
+### `ijfw help` actually opens the guide now
+
+- Pre-existing bug since 1.1.1: two `ijfw` binaries on disk, only the `installer/dist/ijfw.js` bundle (reachable via `npx`) knew the `help` subcommand. The `~/.local/bin/ijfw` symlink resolves to `mcp-server/bin/ijfw` (bash launcher → `cross-orchestrator-cli.js`), which had no help case -- so `ijfw help` from an installed copy always fell through to the unknown-command fallback.
+- `cross-orchestrator-cli.js` gains a `handleGuide(useBrowser)` function and a dispatch entry. Terminal mode pipes `docs/GUIDE.md` through `less -R` (when TTY + less available, else cats). Browser mode renders GUIDE.md via marked.js + GitHub-dark CSS to `~/.ijfw/guide/index.html` and opens it via `open` / `xdg-open` / `start` per platform.
+- DOM insertion uses `Range.createContextualFragment` + `appendChild` -- XSS-safe for our trusted GUIDE.md source.
+
+### Announcement post + browser render
+
+- New `docs/announcements/ijfw-1.1.4-launch.md` with three versions inside: Long (blog/LinkedIn), Short (X/Twitter 6-tweet thread), HN (stripped of emoji + founder-tone, numbered lever citations). Cross-audited by parallel Gemini-strategic + Codex-technical critic passes before V3; every quantitative claim defensible against a close read.
+- Accompanying `docs/announcements/ijfw-1.1.4-launch.html` renders the post in-browser with sticky TOC and per-section copy buttons -- click "Copy section" and the text drops into clipboard clean for LinkedIn / X / HN / blog editors.
+
+### Internal
+
+- `mcp-server/package.json` bumped 1.1.3 -> 1.1.4 in lockstep with the installer.
+- Git history scrubbed of `Co-Authored-By: Claude` trailers. Tags v1.1.2 and v1.1.3 re-pointed at the clean commits. Contributor graph shows only TheRealSeanDonahoe.
+- Tag-protection ruleset `Protect release tags` enforced on `refs/tags/v*` (deletion + non-fast-forward blocked).
+- Branch-protection on `main` now requires `CI` + `Windows smoke` green before merge; force-push blocked; delete blocked; admin bypass for review/checks.
+
+### Notes for upgraders
+
+- No behavioral change to the installer, MCP server, or any platform config surface. Safe upgrade.
+- Users on 1.1.3 running `ijfw update` will pick up the `ijfw help` fix and the new README.
+
 ## [1.1.3] -- 2026-04-21
 
 Windows "it just works" fix + Windows CI gate.
