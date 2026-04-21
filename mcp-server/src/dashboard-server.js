@@ -23,6 +23,12 @@ import { buildRecallCounts, mergeRecallCounts, topRecalled } from './memory/reca
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // Repo root two levels up from src/
 const REPO_ROOT = join(__dirname, '..', '..');
+
+// Read version dynamically from mcp-server/package.json so bumps don't drift.
+const PKG_VERSION = (() => {
+  try { return JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')).version; }
+  catch { return 'unknown'; }
+})();
 const HTML_PATH = join(__dirname, 'dashboard-client.html');
 
 const DEFAULT_PORT  = 37891;
@@ -197,7 +203,7 @@ export async function startServer(options = {}) {
     ledgerPath = join(homedir(), '.ijfw', 'observations.jsonl'),
     port: preferredPort = DEFAULT_PORT,
     maxPort,
-    version = '1.1.0',
+    version = PKG_VERSION,
   } = options;
 
   // Walk up to PORT_WALK_MAX ports from preferredPort.

@@ -35,6 +35,13 @@ Run tests/linter after every fix.
 Confirm the original symptom is gone and no adjacent regression introduced.
 Store result: `ijfw_memory_store: <what broke>, <root cause>, <fix applied>`
 
+## Step 6 -- Two-strikes session reset
+If two attempts at root-cause fixes both fail to clear the original symptom, stop. Do not try a third on the same hypothesis tree. Summarize in three lines: what you tried, what each attempt revealed, what you now believe is true. Then ask the user:
+
+> `Two attempts didn't land it. Recommend resetting this session and starting fresh with: "<sharpened prompt>". Accumulated failed context degrades the next attempt; a fresh session with a tighter brief usually clears it on the first try.`
+
+Capture the summary in `ijfw_memory_store` so the next session inherits the lessons without inheriting the noise.
+
 ## Output format
 ```
 SYMPTOM:     <one line>

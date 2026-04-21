@@ -88,6 +88,13 @@ For focused work. Picks up from current context. Each move has ONE input slot.
 
 - AI parses the goal from the ask or asks: `Goal in one line.`
 - Memory hook fires. AI pastes up to 3 related recalls inline.
+- **Rewrite vague asks into verifiable goals before echoing back:**
+  - "Add validation" -> "Write tests for invalid inputs (empty, malformed, oversized), then make them pass."
+  - "Fix the bug" -> "Write a failing test that reproduces the reported symptom, then make it pass."
+  - "Refactor X" -> "Existing test suite passes before and after. No public API changes."
+  - "Make it faster" -> "Benchmark the hot path, identify the bottleneck with profiling, change it, show the benchmark improved."
+  - "Clean up the code" -> "Pick one specific smell. Fix only that. Diff fits in one commit message."
+- If the ask cannot be reduced to a checkable outcome, surface that gap before proceeding.
 - AI echoes: `So: <concise goal>. Yes?`
 - User confirms or edits.
 

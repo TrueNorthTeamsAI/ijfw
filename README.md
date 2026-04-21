@@ -109,7 +109,7 @@ ijfw uninstall --purge  # also removes memory (destructive)
 
 Equivalent aliases: `ijfw off` (same as `ijfw uninstall`), or `ijfw-uninstall` from the `@ijfw/install` npm package.
 
-What gets removed: IJFW entries from `~/.claude/settings.json` (`mcpServers.ijfw-memory`, `enabledPlugins['ijfw@ijfw']`, `extraKnownMarketplaces.ijfw`), Codex / Gemini / Cursor / Windsurf / Copilot platform configs, `~/.ijfw/claude`, `~/.ijfw/mcp-server`, the `ijfw*` binaries from `~/.local/bin/`, and plugin cache under `~/.claude/plugins/cache/ijfw/`. Every modified file gets a `.bak.<timestamp>` first. Your other plugins, MCP servers, and per-project trust settings stay untouched.
+What gets removed: IJFW entries from `~/.claude/settings.json` (`mcpServers.ijfw-memory`, `enabledPlugins['ijfw@ijfw']`, `extraKnownMarketplaces.ijfw`), Codex / Gemini / Cursor / Windsurf / Copilot / Hermes / Wayland platform configs, `~/.ijfw/claude`, `~/.ijfw/mcp-server`, the `ijfw*` binaries from `~/.local/bin/`, and plugin cache under `~/.claude/plugins/cache/ijfw/`. Every modified file gets a `.bak.<timestamp>` first. Your other plugins, MCP servers, and per-project trust settings stay untouched.
 
 * * *
 
@@ -340,7 +340,7 @@ ijfw update                        Pull latest + reinstall merge-safely.
 ijfw receipt last                  Redacted, shareable block from the last Trident run.
 ```
 
-### Six platforms, one install, one workflow
+### Eight platforms, one install, one workflow
 
 | Platform | What ships |
 |----------|------------|
@@ -457,7 +457,7 @@ Full accounting in [NO\_TELEMETRY.md](NO_TELEMETRY.md). Every data path, every f
 ## FAQ
 
 **Is this just a Claude Code plugin?**  
-No. Claude Code is one of six platforms. The plugin is richest there because Claude Code exposes the most integration points. Every capability is available on the other five through their native MCP and rules-file integrations.
+No. Claude Code is one of eight platforms. The plugin is richest there because Claude Code exposes the most integration points. Every capability is available on the other seven (Codex, Gemini, Cursor, Windsurf, Copilot, Hermes, Wayland) through their native MCP and rules-file integrations.
 
 **Do I need a specific AI provider?**  
 No. IJFW configures the agents you already have. Bring your own keys, your own CLIs. The Trident uses whatever auditors are reachable on your machine. One is enough to start.

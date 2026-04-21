@@ -32,6 +32,21 @@ pattern rather than answering from the same frame they asked from.
    1-line recommendation: proceed / proceed with X mitigation / stop and
    rework because Y. Own the verdict -- don't just hedge.
 
+## Refactor reframe (single-line trigger)
+
+When the user is mid-refactor and a fix feels hacky, or you catch yourself
+patching around a smell rather than removing it, run this prompt out loud:
+
+> *Knowing everything I know now, what would the elegant solution look like?*
+
+Answer it briefly (3-5 lines). If the elegant version costs less than the
+hack you're about to ship, replace the hack. If it costs more than 2x, log
+the elegant version as a follow-up and proceed with the pragmatic fix --
+but only after you've named the debt explicitly.
+
+Skip this for trivial or obvious fixes; the point is to break frame on
+non-trivial decisions, not to over-engineer.
+
 ## When NOT to critique
 
 - The user is midway through implementing and needs help, not a critique.

@@ -36,7 +36,9 @@ RECOMMENDATION
   Archive <N> entries to .ijfw/memory/archive/. No data is deleted.
 ```
 
-5. Ask before acting:
+5. **Pruning question:** for each entry flagged STALE or ARCHIVE, ask "Would removing this rule cause the agent to make a mistake?" If no, archive. If yes, keep and tighten. Memory that doesn't change behavior is bloat that crowds out memory that does.
+
+6. Ask before acting:
    > `Archive <N> stale entries? (y/n -- files move to .ijfw/memory/archive/, not deleted)`
 
 6. On confirmation, move flagged files. Store audit result:

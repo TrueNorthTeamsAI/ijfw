@@ -18,9 +18,17 @@ import {
   appendFileSync, readdirSync, statSync, renameSync, unlinkSync,
   openSync, closeSync
 } from 'fs';
-import { join, resolve, isAbsolute, normalize, basename } from 'path';
+import { join, resolve, isAbsolute, normalize, basename, dirname } from 'path';
 import { homedir } from 'os';
+import { fileURLToPath } from 'url';
 import { createHash, randomBytes } from 'crypto';
+
+// Read version dynamically from package.json so bumps don't require a code change.
+const __pkg_dirname = dirname(fileURLToPath(import.meta.url));
+const PKG_VERSION = (() => {
+  try { return JSON.parse(readFileSync(join(__pkg_dirname, '..', 'package.json'), 'utf8')).version; }
+  catch { return 'unknown'; }
+})();
 import { checkPrompt } from './prompt-check.js';
 import { applyCaps, CAP_CONTENT } from './caps.js';
 import { ensureSchemaHeader, SCHEMA_HEADER } from './schema.js';
@@ -1012,7 +1020,7 @@ function handleMessage(msg) {
       return createResponse(id, {
         protocolVersion: '2024-11-05',
         capabilities: { tools: {}, resources: {}, prompts: {} },
-        serverInfo: { name: 'ijfw-memory', version: '1.1.0', schemaVersion: SCHEMA_VERSION }
+        serverInfo: { name: 'ijfw-memory', version: PKG_VERSION, schemaVersion: SCHEMA_VERSION }
       });
 
     case 'notifications/initialized':

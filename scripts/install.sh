@@ -17,6 +17,11 @@
 set -u
 
 REPO_ROOT="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Canonicalize HOME the same way. On macOS /var/folders is a symlink to
+# /private/var/folders, so a raw-HOME vs cd-P-resolved REPO_ROOT comparison
+# would always miss the self-loop even when they point at the same inode.
+# Self-loop guards below (PLUGIN_DST, MCP_DST) rely on this equality holding.
+HOME_REAL="$(cd -P "$HOME" 2>/dev/null && pwd || printf '%s' "$HOME")"
 
 # Opt-in dev-tree protection: set IJFW_PROTECT_DEV_TREE=1 to block the installer
 # from writing platform configs when PWD is the source repo. Off by default --
@@ -25,6 +30,13 @@ if [ "${IJFW_PROTECT_DEV_TREE:-0}" = "1" ] && [ -f "$PWD/.ijfw-source" ]; then
   printf "IJFW source-repo detected and IJFW_PROTECT_DEV_TREE=1 -- platform-rule writes skipped.\n"
   exit 1
 fi
+
+# Scope guard: when invoked with a non-default install dir (--dir <scratch>),
+# skip the user-home-mutating steps so dogfood/E2E runs do not clobber the
+# user's real ~/.ijfw, ~/.local/bin, or ~/.claude plugin cache. install.js
+# sets IJFW_CUSTOM_DIR=1 when the user passes --dir to a non-canonical path.
+IJFW_CUSTOM_DIR="${IJFW_CUSTOM_DIR:-0}"
+
 LAUNCHER="$REPO_ROOT/mcp-server/bin/ijfw-memory"
 
 # ============================================================
@@ -107,7 +119,7 @@ for arg in "$@"; do
     *) TARGETS+=("$arg") ;;
   esac
 done
-[ ${#TARGETS[@]} -eq 0 ] && TARGETS=(claude codex gemini cursor windsurf copilot)
+[ ${#TARGETS[@]} -eq 0 ] && TARGETS=(claude codex gemini cursor windsurf copilot hermes wayland)
 
 if [ ! -x "$LAUNCHER" ]; then
   chmod +x "$LAUNCHER" 2>/dev/null
@@ -129,35 +141,45 @@ TS=$(date +%Y%m%d-%H%M%S)
 #   3. Wrong targets (stale path from scp'd-over config) get retargeted.
 # Platform-aware: symlink on POSIX, directory copy on Windows (no symlinks
 # without developer mode or admin).
-PLUGIN_DST="$HOME/.ijfw/claude"
+PLUGIN_DST="$HOME_REAL/.ijfw/claude"
 PLUGIN_SRC="$REPO_ROOT/claude"
-mkdir -p "$HOME/.ijfw"
 IS_WINDOWS=0
 case "$(uname -s 2>/dev/null)" in
   MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=1 ;;
 esac
 
-if [ "$IS_WINDOWS" -eq 1 ]; then
-  # No reliable symlinks on Windows without admin/dev-mode. Mirror the tree.
-  if [ -d "$PLUGIN_DST" ] && [ ! -L "$PLUGIN_DST" ]; then
-    cp -r "$PLUGIN_SRC"/. "$PLUGIN_DST"/ 2>/dev/null
-  else
-    rm -rf "$PLUGIN_DST" 2>/dev/null
-    cp -r "$PLUGIN_SRC" "$PLUGIN_DST" 2>/dev/null
-  fi
+# Skip user-home sibling links entirely when scoped to a custom dir.
+if [ "$IJFW_CUSTOM_DIR" = "1" ]; then
+  printf "  [+] Custom-dir install -- skipping ~/.ijfw/ sibling links (canonical-dir feature).\n"
+elif [ "$PLUGIN_SRC" = "$PLUGIN_DST" ]; then
+  # Self-loop guard: when REPO_ROOT == $HOME/.ijfw (user installed into the
+  # canonical home and the source happens to live there), the plugin is
+  # already at PLUGIN_DST. Symlinking would create a self-loop.
+  printf "  [+] Plugin source already at canonical path -- symlink not needed.\n"
 else
-  # POSIX: symlink, retargeting if wrong, fixing if broken.
-  if [ -L "$PLUGIN_DST" ]; then
-    CUR_TARGET="$(readlink "$PLUGIN_DST")"
-    if [ "$CUR_TARGET" != "$PLUGIN_SRC" ]; then
+  mkdir -p "$HOME/.ijfw"
+  if [ "$IS_WINDOWS" -eq 1 ]; then
+    # No reliable symlinks on Windows without admin/dev-mode. Mirror the tree.
+    if [ -d "$PLUGIN_DST" ] && [ ! -L "$PLUGIN_DST" ]; then
+      cp -r "$PLUGIN_SRC"/. "$PLUGIN_DST"/ 2>/dev/null
+    else
+      rm -rf "$PLUGIN_DST" 2>/dev/null
+      cp -r "$PLUGIN_SRC" "$PLUGIN_DST" 2>/dev/null
+    fi
+  else
+    # POSIX: symlink, retargeting if wrong, fixing if broken.
+    if [ -L "$PLUGIN_DST" ]; then
+      CUR_TARGET="$(readlink "$PLUGIN_DST")"
+      if [ "$CUR_TARGET" != "$PLUGIN_SRC" ]; then
+        ln -sfn "$PLUGIN_SRC" "$PLUGIN_DST"
+      fi
+    elif [ -e "$PLUGIN_DST" ]; then
+      # Existing real directory -- preserve by renaming aside.
+      mv "$PLUGIN_DST" "$PLUGIN_DST.backup.$TS"
+      ln -sfn "$PLUGIN_SRC" "$PLUGIN_DST"
+    else
       ln -sfn "$PLUGIN_SRC" "$PLUGIN_DST"
     fi
-  elif [ -e "$PLUGIN_DST" ]; then
-    # Existing real directory -- preserve by renaming aside.
-    mv "$PLUGIN_DST" "$PLUGIN_DST.backup.$TS"
-    ln -sfn "$PLUGIN_SRC" "$PLUGIN_DST"
-  else
-    ln -sfn "$PLUGIN_SRC" "$PLUGIN_DST"
   fi
 fi
 
@@ -172,7 +194,8 @@ fi
 # can't resolve the node binary. Writing the absolute path sidesteps PATH
 # entirely -- works on macOS, Linux, and Windows (where NODE_BIN is
 # C:\...\node.exe).
-if [ -n "${NODE_BIN:-}" ] && [ -f "$PLUGIN_DST/.mcp.json" ]; then
+# Skip for custom-dir installs so we don't mutate the user's real plugin .mcp.json.
+if [ "$IJFW_CUSTOM_DIR" != "1" ] && [ -n "${NODE_BIN:-}" ] && [ -f "$PLUGIN_DST/.mcp.json" ]; then
   ABS_SERVER_JS="$REPO_ROOT/mcp-server/src/server.js"
   "$NODE_BIN" -e '
     const fs = require("fs");
@@ -206,9 +229,11 @@ fi
 # ~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/ and does NOT
 # automatically re-sync on source changes. Cache invalidation is required
 # after any plugin file update (hooks, skills, .mcp.json).
-CLAUDE_PLUGIN_CACHE="$HOME/.claude/plugins/cache/ijfw"
-if [ -d "$CLAUDE_PLUGIN_CACHE" ]; then
-  rm -rf "$CLAUDE_PLUGIN_CACHE" 2>/dev/null
+if [ "$IJFW_CUSTOM_DIR" != "1" ]; then
+  CLAUDE_PLUGIN_CACHE="$HOME/.claude/plugins/cache/ijfw"
+  if [ -d "$CLAUDE_PLUGIN_CACHE" ]; then
+    rm -rf "$CLAUDE_PLUGIN_CACHE" 2>/dev/null
+  fi
 fi
 
 # Also link/copy mcp-server as a SIBLING of the plugin so the plugin's
@@ -217,9 +242,15 @@ fi
 # Without this, ${CLAUDE_PLUGIN_ROOT}/../mcp-server looks for mcp-server under
 # ~/.ijfw/ which doesn't exist -- plugin MCP spawn fails.
 MCP_SRC="$REPO_ROOT/mcp-server"
-MCP_DST="$HOME/.ijfw/mcp-server"
+MCP_DST="$HOME_REAL/.ijfw/mcp-server"
 
-if [ "$IS_WINDOWS" -eq 1 ]; then
+# Same scope guard for the MCP sibling link.
+if [ "$IJFW_CUSTOM_DIR" = "1" ]; then
+  : # custom-dir install already skipped in plugin section above
+elif [ "$MCP_SRC" = "$MCP_DST" ]; then
+  # Self-loop guard: source and destination resolve to the same path.
+  printf "  [+] MCP source already at canonical path -- symlink not needed.\n"
+elif [ "$IS_WINDOWS" -eq 1 ]; then
   if [ -d "$MCP_DST" ] && [ ! -L "$MCP_DST" ]; then
     cp -r "$MCP_SRC"/. "$MCP_DST"/ 2>/dev/null
   else
@@ -243,7 +274,7 @@ if [ ! -f "$MCP_DST/src/server.js" ]; then
 fi
 
 # S6 -- prune backups older than 30 days from common config dirs.
-for d in "$HOME/.codex" "$HOME/.gemini" "$HOME/.codeium/windsurf" ".vscode" ".cursor"; do
+for d in "$HOME/.codex" "$HOME/.gemini" "$HOME/.codeium/windsurf" "$HOME/.hermes" "$HOME/.wayland" ".vscode" ".cursor"; do
   [ -d "$d" ] || continue
   find "$d" -maxdepth 2 -name '*.bak.*' -type f -mtime +30 -print 2>/dev/null \
     | while IFS= read -r old; do rm -f "$old" 2>/dev/null; done
@@ -256,9 +287,9 @@ info() { printf "  -- %s\n" "$1"; }
 # ANSI colors. Skip if NO_COLOR is set or stdout is not a TTY.
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_RESET=$'\033[0m'; C_BOLD=$'\033[1m'; C_DIM=$'\033[2m'
-  C_CYAN=$'\033[36m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_WHITE=$'\033[97m'
+  C_CYAN=$'\033[36m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_WHITE=$'\033[97m'; C_RED=$'\033[31m'
 else
-  C_RESET=; C_BOLD=; C_DIM=; C_CYAN=; C_GREEN=; C_YELLOW=; C_WHITE=
+  C_RESET=; C_BOLD=; C_DIM=; C_CYAN=; C_GREEN=; C_YELLOW=; C_WHITE=; C_RED=
 fi
 
 # Native-path display: Git Bash sees /d/... style paths but users think in
@@ -282,6 +313,8 @@ is_live() {
     cursor)   command -v cursor >/dev/null 2>&1 ;;
     windsurf) command -v windsurf >/dev/null 2>&1 || [ -d "$HOME/.codeium/windsurf" ] ;;
     copilot)  command -v code    >/dev/null 2>&1 || [ -d "$HOME/.vscode" ] || [ -d "$HOME/.config/Code" ] || [ -d "$HOME/Library/Application Support/Code" ] || [ -d "${APPDATA:-}/Code" ] ;;
+    hermes)   command -v hermes  >/dev/null 2>&1 || [ -d "$HOME/.hermes" ] ;;
+    wayland)  command -v wayland >/dev/null 2>&1 || [ -d "$HOME/.wayland" ] ;;
     *) return 1 ;;
   esac
 }
@@ -294,6 +327,8 @@ pretty_name() {
     cursor)   printf 'Cursor' ;;
     windsurf) printf 'Windsurf' ;;
     copilot)  printf 'Copilot' ;;
+    hermes)   printf 'Hermes' ;;
+    wayland)  printf 'Wayland' ;;
     *)        printf '%s' "$1" ;;
   esac
 }
@@ -380,22 +415,31 @@ merge_toml() {
     skip { next }
     { print }
   ' "$dst" > "$tmp" || { rm -f "$tmp"; return 1; }
-  # Upsert codex_hooks = true inside the [features] section.
-  # Uses node to avoid TOML-section duplication on re-run: reads the stripped
-  # file as text, inserts the key if [features] exists, adds the section if not.
+  # Upsert codex_hooks = true inside [features], and the top-level
+  # suppress_unstable_features_warning = true key (so users don't see the
+  # under-development banner on every startup). Node-driven to avoid TOML-
+  # section duplication on idempotent re-runs.
   node -e '
     const fs = require("fs");
     const f = process.argv[1];
     let text = fs.existsSync(f) ? fs.readFileSync(f, "utf8") : "";
+    // --- [features] codex_hooks = true ---
     const key = "codex_hooks = true";
     if (/^\[features\]/m.test(text)) {
-      // Section exists: upsert the key after the [features] line.
       if (!/^codex_hooks\s*=/m.test(text)) {
         text = text.replace(/^(\[features\][^\n]*\n)/m, "$1" + key + "\n");
       }
     } else {
-      // Section absent: append it.
       text = text.replace(/\n+$/, "") + "\n\n[features]\n" + key + "\n";
+    }
+    // --- top-level suppress_unstable_features_warning = true ---
+    if (!/^suppress_unstable_features_warning\s*=/m.test(text)) {
+      // Insert before the first section header so it stays in the root table.
+      if (/^\[/m.test(text)) {
+        text = text.replace(/^(\[)/m, "suppress_unstable_features_warning = true\n\n$1");
+      } else {
+        text = text.replace(/\n+$/, "") + "\nsuppress_unstable_features_warning = true\n";
+      }
     }
     fs.writeFileSync(f, text);
   ' "$tmp" || { rm -f "$tmp"; return 1; }
@@ -409,6 +453,65 @@ merge_toml() {
     printf 'startup_timeout_sec = 10\n'
     printf 'tool_timeout_sec = 30\n'
   } >> "$tmp" || { rm -f "$tmp"; return 1; }
+  mv "$tmp" "$dst"
+}
+
+# --- YAML merge helper (Hermes / Wayland) ---
+# Both CLIs share the schema ~/.<name>/config.yaml with an mcp_servers: top-level
+# dict (command/args/env style, same as Codex TOML / Gemini JSON semantics). We
+# prefer python3+PyYAML for parser-safe merging. If unavailable we fall back to
+# a sentinel-anchored append, which stays idempotent across re-runs.
+merge_yaml_mcp() {
+  local dst="$1" launcher="$2"
+  mkdir -p "$(dirname "$dst")"
+  backup "$dst"
+  [ ! -f "$dst" ] && : > "$dst"
+  # Try python3+PyYAML first (clean, schema-preserving).
+  if python3 -c "import yaml" >/dev/null 2>&1; then
+    python3 - "$dst" "$launcher" <<'PY'
+import os, sys, yaml
+dst, launcher = sys.argv[1], sys.argv[2]
+with open(dst, "r") as f:
+    raw = f.read()
+doc = yaml.safe_load(raw) if raw.strip() else {}
+if not isinstance(doc, dict):
+    doc = {}
+doc.setdefault("mcp_servers", {})
+if not isinstance(doc["mcp_servers"], dict):
+    doc["mcp_servers"] = {}
+doc["mcp_servers"]["ijfw-memory"] = {
+    "command": launcher,
+    "args": [],
+    "enabled": True,
+}
+tmp = dst + ".tmp"
+with open(tmp, "w") as f:
+    yaml.safe_dump(doc, f, sort_keys=False, default_flow_style=False)
+os.replace(tmp, dst)
+PY
+    return 0
+  fi
+  # Fallback: sentinel-anchored strip-and-append (idempotent).
+  local tmp="$dst.merge.$$.tmp"
+  awk '
+    BEGIN { skip = 0 }
+    /^# IJFW-MCP-BEGIN ijfw-memory$/ { skip = 1; next }
+    /^# IJFW-MCP-END ijfw-memory$/   { skip = 0; next }
+    skip { next }
+    { print }
+  ' "$dst" > "$tmp" || { rm -f "$tmp"; return 1; }
+  if ! grep -qE '^mcp_servers:' "$tmp"; then
+    printf '\nmcp_servers:\n' >> "$tmp"
+  fi
+  escaped_launcher=$(printf '%s' "$launcher" | sed 's/"/\\"/g')
+  {
+    printf '# IJFW-MCP-BEGIN ijfw-memory\n'
+    printf '  ijfw-memory:\n'
+    printf '    command: "%s"\n' "$escaped_launcher"
+    printf '    args: []\n'
+    printf '    enabled: true\n'
+    printf '# IJFW-MCP-END ijfw-memory\n'
+  } >> "$tmp"
   mv "$tmp" "$dst"
 }
 
@@ -449,6 +552,13 @@ for target in "${TARGETS[@]}"; do
   case "$target" in
     claude)
       log "[Claude Code]"
+      if [ "$IJFW_CUSTOM_DIR" = "1" ]; then
+        info "Custom-dir install -- skipping ~/.claude/settings.json merge."
+        ok "Claude Code: real platform config left untouched."
+        log ""
+        if is_live "$target"; then LIVE+=("$(pretty_name "$target")"); else STANDBY+=("$(pretty_name "$target")"); fi
+        continue
+      fi
       # Auto-register: write enabledPlugins + extraKnownMarketplaces into
       # ~/.claude/settings.json and ~/.claude/plugins/known_marketplaces.json.
       # Uses node for atomic read-modify-write; idempotent on re-run.
@@ -554,6 +664,13 @@ for target in "${TARGETS[@]}"; do
       ;;
     codex)
       log "[Codex CLI]"
+      if [ "$IJFW_CUSTOM_DIR" = "1" ]; then
+        info "Custom-dir install -- skipping ~/.codex/ merges."
+        ok "Codex: real platform config left untouched."
+        log ""
+        if is_live "$target"; then LIVE+=("$(pretty_name "$target")"); else STANDBY+=("$(pretty_name "$target")"); fi
+        continue
+      fi
       # Merge MCP registration into user config.toml.
       dst="$HOME/.codex/config.toml"
       merge_toml "$dst" "$LAUNCHER"
@@ -568,19 +685,43 @@ for target in "${TARGETS[@]}"; do
         const dst = process.argv[1];
         const src = process.argv[2];
         const base = process.argv[3];
-        // Load existing hooks.json or start fresh.
-        let doc = { hooks: [] };
+        // Codex hooks.json schema (authoritative as of codex-cli 0.122.x):
+        //   { "hooks": { EventName: [ MatcherGroup, ... ] } }
+        //   MatcherGroup = { matcher?: string, hooks: [{type:"command", command, timeout?, ...}] }
+        // Valid events: SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop, PermissionRequest.
+        // Read side: migrate from legacy shapes so users upgrading dont break.
+        let doc = {};
         if (fs.existsSync(dst)) {
-          try { doc = JSON.parse(fs.readFileSync(dst, "utf8") || "{}"); } catch { doc = { hooks: [] }; }
+          try { doc = JSON.parse(fs.readFileSync(dst, "utf8") || "{}"); } catch { doc = {}; }
         }
-        if (!Array.isArray(doc.hooks)) doc.hooks = [];
-        // Load IJFW source entries and rewrite script paths to absolute.
+        if (!doc || typeof doc !== "object" || Array.isArray(doc)) doc = {};
+        // If file was a bare array (our own previous misunderstanding), discard IJFW entries
+        // and start fresh; non-IJFW entries cant be rescued because they dont fit the new shape.
+        if (!doc.hooks || typeof doc.hooks !== "object" || Array.isArray(doc.hooks)) doc.hooks = {};
+        const VALID_EVENTS = ["SessionStart","UserPromptSubmit","PreToolUse","PostToolUse","Stop","PermissionRequest"];
+        for (const ev of VALID_EVENTS) {
+          if (!Array.isArray(doc.hooks[ev])) doc.hooks[ev] = [];
+          // Drop any prior IJFW matcher-group (idempotent re-run).
+          doc.hooks[ev] = doc.hooks[ev].filter(g => {
+            if (!g || !Array.isArray(g.hooks)) return true;
+            return !g.hooks.some(h => h && h._ijfw);
+          });
+        }
+        // Load IJFW source (new nested shape) and rewrite command paths to absolute.
         const ijfw = JSON.parse(fs.readFileSync(src, "utf8"));
-        for (const entry of ijfw.hooks) {
-          const absScript = base + "/" + entry.script.replace(/^hooks\//, "");
-          // Remove any prior IJFW entry for this event (idempotent re-run).
-          doc.hooks = doc.hooks.filter(h => !(h._ijfw && h.event === entry.event));
-          doc.hooks.push({ event: entry.event, script: absScript, description: entry.description, _ijfw: true });
+        const srcHooks = (ijfw && ijfw.hooks) ? ijfw.hooks : {};
+        for (const [ev, groups] of Object.entries(srcHooks)) {
+          if (!VALID_EVENTS.includes(ev)) continue;
+          if (!Array.isArray(groups)) continue;
+          for (const g of groups) {
+            if (!g || !Array.isArray(g.hooks)) continue;
+            const rewritten = g.hooks.map(h => {
+              if (!h || h.type !== "command" || !h.command) return h;
+              const cmd = base + "/" + String(h.command).replace(/^hooks\//, "");
+              return { ...h, command: cmd };
+            });
+            doc.hooks[ev].push({ ...(g.matcher ? { matcher: g.matcher } : {}), hooks: rewritten });
+          }
         }
         fs.writeFileSync(dst + ".tmp", JSON.stringify(doc, null, 2) + "\n");
         fs.renameSync(dst + ".tmp", dst);
@@ -616,6 +757,13 @@ for target in "${TARGETS[@]}"; do
       ;;
     gemini)
       log "[Gemini CLI]"
+      if [ "$IJFW_CUSTOM_DIR" = "1" ]; then
+        info "Custom-dir install -- skipping ~/.gemini/ merges."
+        ok "Gemini: real platform config left untouched."
+        log ""
+        if is_live "$target"; then LIVE+=("$(pretty_name "$target")"); else STANDBY+=("$(pretty_name "$target")"); fi
+        continue
+      fi
       # Merge MCP registration into user settings.json.
       dst="$HOME/.gemini/settings.json"
       merge_json "$dst" "$LAUNCHER"
@@ -671,6 +819,13 @@ for target in "${TARGETS[@]}"; do
       ;;
     windsurf)
       log "[Windsurf]"
+      if [ "$IJFW_CUSTOM_DIR" = "1" ]; then
+        info "Custom-dir install -- skipping ~/.codeium/windsurf/ merge."
+        ok "Windsurf: real platform config left untouched."
+        log ""
+        if is_live "$target"; then LIVE+=("$(pretty_name "$target")"); else STANDBY+=("$(pretty_name "$target")"); fi
+        continue
+      fi
       dst="$HOME/.codeium/windsurf/mcp_config.json"
       merge_json "$dst" "$LAUNCHER"
       # W4.1 / E2 -- copy the .windsurfrules to the current project.
@@ -696,6 +851,59 @@ for target in "${TARGETS[@]}"; do
       else
         ok "Merged MCP into project ./.vscode/mcp.json"
       fi
+      ;;
+    hermes)
+      log "[Hermes]"
+      if [ "$IJFW_CUSTOM_DIR" = "1" ]; then
+        info "Custom-dir install -- skipping ~/.hermes/ merges."
+        ok "Hermes: real platform config left untouched."
+        log ""
+        if is_live "$target"; then LIVE+=("$(pretty_name "$target")"); else STANDBY+=("$(pretty_name "$target")"); fi
+        continue
+      fi
+      dst="$HOME/.hermes/config.yaml"
+      merge_yaml_mcp "$dst" "$LAUNCHER"
+      # Drop HERMES.md context file if absent (don't overwrite user edits).
+      if [ ! -f "$HOME/.hermes/HERMES.md" ] && [ -f "$REPO_ROOT/hermes/HERMES.md" ]; then
+        mkdir -p "$HOME/.hermes" 2>/dev/null
+        cp "$REPO_ROOT/hermes/HERMES.md" "$HOME/.hermes/HERMES.md" 2>/dev/null
+      fi
+      # Skills: Hermes reads ~/.hermes/skills/<name>/SKILL.md (agentskills.io format).
+      # IJFW's shared/skills/ is already in that format -- copy new ones only.
+      mkdir -p "$HOME/.hermes/skills" 2>/dev/null
+      for skill_dir in "$REPO_ROOT/shared/skills/"*/; do
+        skill_name=$(basename "$skill_dir")
+        if [ ! -d "$HOME/.hermes/skills/$skill_name" ]; then
+          cp -r "$skill_dir" "$HOME/.hermes/skills/$skill_name" 2>/dev/null
+        fi
+      done
+      ok "Installed Hermes bundle: MCP + HERMES.md + skills"
+      ;;
+    wayland)
+      log "[Wayland]"
+      if [ "$IJFW_CUSTOM_DIR" = "1" ]; then
+        info "Custom-dir install -- skipping ~/.wayland/ merges."
+        ok "Wayland: real platform config left untouched."
+        log ""
+        if is_live "$target"; then LIVE+=("$(pretty_name "$target")"); else STANDBY+=("$(pretty_name "$target")"); fi
+        continue
+      fi
+      dst="$HOME/.wayland/config.yaml"
+      merge_yaml_mcp "$dst" "$LAUNCHER"
+      # Drop WAYLAND.md context file if absent.
+      if [ ! -f "$HOME/.wayland/WAYLAND.md" ] && [ -f "$REPO_ROOT/wayland/WAYLAND.md" ]; then
+        mkdir -p "$HOME/.wayland" 2>/dev/null
+        cp "$REPO_ROOT/wayland/WAYLAND.md" "$HOME/.wayland/WAYLAND.md" 2>/dev/null
+      fi
+      # Skills: Wayland reads ~/.wayland/skills/<name>/SKILL.md.
+      mkdir -p "$HOME/.wayland/skills" 2>/dev/null
+      for skill_dir in "$REPO_ROOT/shared/skills/"*/; do
+        skill_name=$(basename "$skill_dir")
+        if [ ! -d "$HOME/.wayland/skills/$skill_name" ]; then
+          cp -r "$skill_dir" "$HOME/.wayland/skills/$skill_name" 2>/dev/null
+        fi
+      done
+      ok "Installed Wayland bundle: MCP + WAYLAND.md + skills"
       ;;
     *)
       info "skipping unknown target: $target"
@@ -811,58 +1019,67 @@ fi
 
 printf '\n  CLI wiring\n  ──────────\n'
 
-CLI_BINS="ijfw ijfw-memory ijfw-dispatch-plan ijfw-dashboard ijfw-memorize"
-CLI_SRC_DIR="$REPO_ROOT/mcp-server/bin"
-CLI_LINK_DIR=""
-CLI_LINK_ON_PATH=0
+# Skip ~/.local/bin wiring when scoped to a custom dir -- avoids polluting
+# the user's PATH with symlinks that point at a scratch install location.
+if [ "$IJFW_CUSTOM_DIR" = "1" ]; then
+  printf '  [+] Custom-dir install -- skipping ~/.local/bin wiring.\n'
+  printf "      Run binaries directly from %s/mcp-server/bin/ or add that dir to PATH.\n" "$REPO_ROOT"
+  CLI_LINKED=0
+  CLI_FAILED=0
+else
+  CLI_BINS="ijfw ijfw-memory ijfw-dispatch-plan ijfw-dashboard ijfw-memorize"
+  CLI_SRC_DIR="$REPO_ROOT/mcp-server/bin"
+  CLI_LINK_DIR=""
+  CLI_LINK_ON_PATH=0
 
-# Find a suitable link dir. Prefer ones already on PATH.
-for candidate in "$HOME/.local/bin" "$HOME/bin" "/usr/local/bin"; do
-  case ":$PATH:" in
-    *":$candidate:"*)
-      if [ -d "$candidate" ] && [ -w "$candidate" ]; then
-        CLI_LINK_DIR="$candidate"
-        CLI_LINK_ON_PATH=1
-        break
+  # Find a suitable link dir. Prefer ones already on PATH.
+  for candidate in "$HOME/.local/bin" "$HOME/bin" "/usr/local/bin"; do
+    case ":$PATH:" in
+      *":$candidate:"*)
+        if [ -d "$candidate" ] && [ -w "$candidate" ]; then
+          CLI_LINK_DIR="$candidate"
+          CLI_LINK_ON_PATH=1
+          break
+        fi
+        ;;
+    esac
+  done
+
+  # Fall back to ~/.local/bin even if not on PATH. We'll tell the user how to add it.
+  if [ -z "$CLI_LINK_DIR" ]; then
+    CLI_LINK_DIR="$HOME/.local/bin"
+    mkdir -p "$CLI_LINK_DIR" 2>/dev/null
+  fi
+
+  CLI_LINKED=0
+  CLI_FAILED=0
+  for bin in $CLI_BINS; do
+    src="$CLI_SRC_DIR/$bin"
+    dst="$CLI_LINK_DIR/$bin"
+    if [ -f "$src" ]; then
+      if ln -sfn "$src" "$dst" 2>/dev/null; then
+        CLI_LINKED=$((CLI_LINKED + 1))
+      else
+        CLI_FAILED=$((CLI_FAILED + 1))
       fi
-      ;;
-  esac
-done
+    fi
+  done
 
-# Fall back to ~/.local/bin even if not on PATH. We'll tell the user how to add it.
-if [ -z "$CLI_LINK_DIR" ]; then
-  CLI_LINK_DIR="$HOME/.local/bin"
-  mkdir -p "$CLI_LINK_DIR" 2>/dev/null
-fi
-
-CLI_LINKED=0
-CLI_FAILED=0
-for bin in $CLI_BINS; do
-  src="$CLI_SRC_DIR/$bin"
-  dst="$CLI_LINK_DIR/$bin"
-  if [ -f "$src" ]; then
-    if ln -sfn "$src" "$dst" 2>/dev/null; then
-      CLI_LINKED=$((CLI_LINKED + 1))
+  if [ "$CLI_LINKED" -gt 0 ]; then
+    printf '  %s[+]%s %d commands linked into %s\n' "$C_GREEN" "$C_RESET" "$CLI_LINKED" "$CLI_LINK_DIR"
+    if [ "$CLI_LINK_ON_PATH" -eq 1 ]; then
+      printf '      Try now: %sijfw doctor%s\n' "$C_BOLD" "$C_RESET"
     else
-      CLI_FAILED=$((CLI_FAILED + 1))
+      printf '  %s[!]%s %s is not on your PATH yet.\n' "$C_YELLOW" "$C_RESET" "$CLI_LINK_DIR"
+      printf '      Add this to your shell rc (~/.bashrc or ~/.zshrc):\n'
+      printf '        %sexport PATH="$HOME/.local/bin:$PATH"%s\n' "$C_BOLD" "$C_RESET"
+      printf '      Then: %ssource ~/.bashrc%s (or restart your terminal)\n' "$C_BOLD" "$C_RESET"
+      CLI_NEEDS_PATH=1
     fi
   fi
-done
-
-if [ "$CLI_LINKED" -gt 0 ]; then
-  printf '  %s[+]%s %d commands linked into %s\n' "$C_GREEN" "$C_RESET" "$CLI_LINKED" "$CLI_LINK_DIR"
-  if [ "$CLI_LINK_ON_PATH" -eq 1 ]; then
-    printf '      Try now: %sijfw doctor%s\n' "$C_BOLD" "$C_RESET"
-  else
-    printf '  %s[!]%s %s is not on your PATH yet.\n' "$C_YELLOW" "$C_RESET" "$CLI_LINK_DIR"
-    printf '      Add this to your shell rc (~/.bashrc or ~/.zshrc):\n'
-    printf '        %sexport PATH="$HOME/.local/bin:$PATH"%s\n' "$C_BOLD" "$C_RESET"
-    printf '      Then: %ssource ~/.bashrc%s (or restart your terminal)\n' "$C_BOLD" "$C_RESET"
-    CLI_NEEDS_PATH=1
+  if [ "$CLI_FAILED" -gt 0 ]; then
+    printf '  %s[!]%s %d commands could not be linked (check permissions on %s)\n' "$C_YELLOW" "$C_RESET" "$CLI_FAILED" "$CLI_LINK_DIR"
   fi
-fi
-if [ "$CLI_FAILED" -gt 0 ]; then
-  printf '  %s[!]%s %d commands could not be linked (check permissions on %s)\n' "$C_YELLOW" "$C_RESET" "$CLI_FAILED" "$CLI_LINK_DIR"
 fi
 
 # ============================================================

@@ -143,7 +143,17 @@ function cloneOrPull(dir, branch) {
 function runInstallScript(dir) {
   const script = join(dir, 'scripts', 'install.sh');
   if (!existsSync(script)) throw new Error(`IJFW install script not found at ${script} -- re-run the installer to restore it.`);
-  const env = { ...process.env, IJFW_NONINTERACTIVE: process.env.CI ? '1' : (process.env.IJFW_NONINTERACTIVE ?? '') };
+  // Tell install.sh whether this is a custom-dir install so it skips the
+  // user-home mutations (sibling links, ~/.local/bin wiring, ~/.claude
+  // cache invalidation, real plugin .mcp.json patching).
+  const canonicalDir = join(homedir(), '.ijfw');
+  const isCustomDir = resolve(dir) !== canonicalDir ? '1' : '0';
+  const env = {
+    ...process.env,
+    IJFW_NONINTERACTIVE: process.env.CI ? '1' : (process.env.IJFW_NONINTERACTIVE ?? ''),
+    IJFW_HOME: dir,
+    IJFW_CUSTOM_DIR: isCustomDir,
+  };
   const r = spawnSync('bash', ['scripts/install.sh'], { cwd: dir, stdio: 'inherit', env });
   if (r.status !== 0) throw new Error(`IJFW platform config step did not complete (exit ${r.status}) -- run ijfw doctor to see what to fix.`);
 }
@@ -184,7 +194,7 @@ async function main() {
   }
 
   console.log('');
-  console.log('IJFW now active across 7 platforms -- one memory layer, all your AIs, zero config.');
+  console.log('IJFW now active across 8 platforms -- one memory layer, all your AIs, zero config.');
   console.log('  Run `ijfw demo` to see the Trident in action.');
   console.log('  Run `ijfw doctor` to confirm which auditors are reachable.');
   console.log('  Privacy: everything stays local. See NO_TELEMETRY.md.');

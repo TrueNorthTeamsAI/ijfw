@@ -1,34 +1,72 @@
 {
-  "hooks": [
-    {
-      "event": "SessionStart",
-      "script": "hooks/session-start.sh",
-      "description": "Initialize IJFW state, emit startup banner, register project in global registry."
-    },
-    {
-      "event": "Stop",
-      "script": "hooks/session-end.sh",
-      "description": "Save session metrics, write journal entry, emit savings receipt. Also polls context utilization and triggers compress hint when threshold crossed (PreCompact workaround)."
-    },
-    {
-      "event": "UserPromptSubmit",
-      "script": "hooks/pre-prompt.sh",
-      "description": "Deterministic vague-prompt detector. Injects sharpening context when prompt signals are weak."
-    },
-    {
-      "event": "PreToolUse",
-      "script": "hooks/pre-tool-use.sh",
-      "description": "Scan about-to-run commands for destructive patterns. Inject confirmation reminders before execution."
-    },
-    {
-      "event": "PostToolUse",
-      "script": "hooks/post-tool-use.sh",
-      "description": "Trim tool output noise, capture error signals, emit cleaned output as additionalContext."
-    },
-    {
-      "event": "AfterAgent",
-      "script": "hooks/after-agent.sh",
-      "description": "Post-agent cleanup: flush signal files, update session state."
-    }
-  ]
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/session-start.sh",
+            "timeout": 10,
+            "statusMessage": "IJFW: initializing",
+            "_ijfw": true,
+            "_description": "Initialize IJFW state, emit startup banner, register project in global registry."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/session-end.sh",
+            "timeout": 10,
+            "_ijfw": true,
+            "_description": "Save session metrics, write journal entry, emit savings receipt. Also polls context utilization and triggers compress hint when threshold crossed (PreCompact workaround)."
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/pre-prompt.sh",
+            "timeout": 5,
+            "_ijfw": true,
+            "_description": "Deterministic vague-prompt detector. Injects sharpening context when prompt signals are weak."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/pre-tool-use.sh",
+            "timeout": 5,
+            "_ijfw": true,
+            "_description": "Scan about-to-run commands for destructive patterns. Inject confirmation reminders before execution."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/post-tool-use.sh",
+            "timeout": 10,
+            "_ijfw": true,
+            "_description": "Trim tool output noise, capture error signals, emit cleaned output as additionalContext."
+          }
+        ]
+      }
+    ]
+  }
 }

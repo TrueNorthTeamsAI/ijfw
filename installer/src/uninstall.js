@@ -3,6 +3,7 @@
 import { existsSync, rmSync, cpSync, mkdtempSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { unmergeMarketplace, claudeSettingsPath } from './marketplace.js';
 
 function parseArgs(argv) {
@@ -69,17 +70,99 @@ function removeJsonMcpEntry(p) {
   return changed;
 }
 
-// Remove all _ijfw:true entries from ~/.codex/hooks.json.
+// Remove IJFW matcher-groups from ~/.codex/hooks.json. Handles three shapes:
+//   (a) current: { hooks: { EventName: [MatcherGroup, ...] } }
+//       -- walk every event, drop MatcherGroups whose inner hooks[] contains an _ijfw entry.
+//   (b) legacy v1 object: { hooks: [HookEntry, ...] } -- drop _ijfw items from the array.
+//   (c) legacy v2 bare array: [HookEntry, ...] -- same as (b).
+// Backwards-compat so uninstall works no matter which schema a user is on.
 function removeCodexHooks(p) {
   if (!existsSync(p)) return false;
   let doc;
   try { doc = JSON.parse(readFileSync(p, 'utf8')); } catch { return false; }
-  if (!Array.isArray(doc.hooks)) return false;
-  const before = doc.hooks.length;
-  doc.hooks = doc.hooks.filter(h => !h._ijfw);
-  if (doc.hooks.length === before) return false;
+
+  // Shape (c): top-level array.
+  if (Array.isArray(doc)) {
+    const before = doc.length;
+    const after = doc.filter(h => !(h && h._ijfw));
+    if (after.length === before) return false;
+    backupFile(p);
+    writeFileSync(p, JSON.stringify(after, null, 2) + '\n');
+    return true;
+  }
+
+  if (!doc || typeof doc !== 'object' || !doc.hooks) return false;
+
+  // Shape (a): nested map.
+  if (doc.hooks && typeof doc.hooks === 'object' && !Array.isArray(doc.hooks)) {
+    let changed = false;
+    for (const ev of Object.keys(doc.hooks)) {
+      const groups = doc.hooks[ev];
+      if (!Array.isArray(groups)) continue;
+      const before = groups.length;
+      doc.hooks[ev] = groups.filter(g => {
+        if (!g || !Array.isArray(g.hooks)) return true;
+        return !g.hooks.some(h => h && h._ijfw);
+      });
+      if (doc.hooks[ev].length !== before) changed = true;
+    }
+    if (!changed) return false;
+    backupFile(p);
+    writeFileSync(p, JSON.stringify(doc, null, 2) + '\n');
+    return true;
+  }
+
+  // Shape (b): legacy array-under-hooks.
+  if (Array.isArray(doc.hooks)) {
+    const before = doc.hooks.length;
+    doc.hooks = doc.hooks.filter(h => !(h && h._ijfw));
+    if (doc.hooks.length === before) return false;
+    backupFile(p);
+    writeFileSync(p, JSON.stringify(doc, null, 2) + '\n');
+    return true;
+  }
+
+  return false;
+}
+
+// Remove mcp_servers.ijfw-memory from a YAML file (Hermes / Wayland).
+// Prefers python3+PyYAML for parser-safe removal; falls back to regex.
+function removeYamlMcpEntry(p) {
+  if (!existsSync(p)) return false;
+  // Cheap pre-check: skip the fork if the key isn't even present.
+  const raw = readFileSync(p, 'utf8');
+  if (!/\bijfw-memory\b/.test(raw)) return false;
+
+  // Try python3+PyYAML first.
+  const py = spawnSync('python3', ['-c', `
+import sys, yaml
+p = sys.argv[1]
+with open(p) as f: raw = f.read()
+doc = yaml.safe_load(raw) if raw.strip() else {}
+if not isinstance(doc, dict): sys.exit(2)
+srv = doc.get("mcp_servers")
+if not isinstance(srv, dict) or "ijfw-memory" not in srv: sys.exit(3)
+del srv["ijfw-memory"]
+if not srv: del doc["mcp_servers"]
+with open(p + ".tmp", "w") as f:
+    yaml.safe_dump(doc, f, sort_keys=False, default_flow_style=False)
+import os; os.replace(p + ".tmp", p)
+`, p], { encoding: 'utf8' });
+  if (py.status === 0) { backupFile(p); return true; }
+
+  // Fallback: regex-strip the ijfw-memory block under mcp_servers.
+  // Matches 2-space indented key plus its 4-space indented body until the next
+  // same-indent sibling or end-of-file. Best-effort; ok for IJFW-shaped YAML.
+  const stripped = raw.replace(
+    /^  ijfw-memory:\n(?:    .*\n)*(?:# IJFW-MCP-END ijfw-memory\n)?/m,
+    ''
+  ).replace(
+    /# IJFW-MCP-BEGIN ijfw-memory\n(?:.*\n)*?# IJFW-MCP-END ijfw-memory\n/,
+    ''
+  );
+  if (stripped === raw) return false;
   backupFile(p);
-  writeFileSync(p, JSON.stringify(doc, null, 2) + '\n');
+  writeFileSync(p, stripped);
   return true;
 }
 
@@ -138,6 +221,24 @@ function cleanPlatforms() {
   const vscodeMcp = join('.vscode', 'mcp.json');
   if (removeJsonMcpEntry(vscodeMcp)) removed.push('.vscode/mcp.json  (removed ijfw-memory)');
 
+  // Hermes: config.yaml MCP entry + skills + context file
+  if (removeYamlMcpEntry(join(HOME, '.hermes', 'config.yaml'))) {
+    removed.push('~/.hermes/config.yaml  (removed ijfw-memory)');
+  }
+  const hermesSkills = removeIjfwSkills(join(HOME, '.hermes', 'skills'));
+  if (hermesSkills > 0) removed.push(`~/.hermes/skills/ijfw-*  (removed ${hermesSkills} skill dirs)`);
+  const hermesMd = join(HOME, '.hermes', 'HERMES.md');
+  if (existsSync(hermesMd)) { rmSync(hermesMd, { force: true }); removed.push('~/.hermes/HERMES.md'); }
+
+  // Wayland: config.yaml MCP entry + skills + context file
+  if (removeYamlMcpEntry(join(HOME, '.wayland', 'config.yaml'))) {
+    removed.push('~/.wayland/config.yaml  (removed ijfw-memory)');
+  }
+  const waylandSkills = removeIjfwSkills(join(HOME, '.wayland', 'skills'));
+  if (waylandSkills > 0) removed.push(`~/.wayland/skills/ijfw-*  (removed ${waylandSkills} skill dirs)`);
+  const waylandMd = join(HOME, '.wayland', 'WAYLAND.md');
+  if (existsSync(waylandMd)) { rmSync(waylandMd, { force: true }); removed.push('~/.wayland/WAYLAND.md'); }
+
   return removed;
 }
 
@@ -176,7 +277,13 @@ async function main() {
     }
   }
 
-  if (!opts.noMarketplace) {
+  // Scope guard: only mutate the user's real Claude marketplace and platform
+  // configs when uninstalling the canonical install. A scratch/custom-dir
+  // uninstall (--dir <other>) MUST NOT strip ~/.codex, ~/.gemini, etc.
+  const canonicalDir = join(HOME, '.ijfw');
+  const isCanonical = target === canonicalDir;
+
+  if (isCanonical && !opts.noMarketplace) {
     const settingsPath = claudeSettingsPath();
     if (existsSync(settingsPath)) {
       unmergeMarketplace(settingsPath);
@@ -184,11 +291,15 @@ async function main() {
     }
   }
 
-  // Clean up platform configs across all 6 platforms.
-  const cleaned = cleanPlatforms();
-  if (cleaned.length > 0) {
-    console.log('  platform configs cleaned:');
-    for (const line of cleaned) console.log(`    ${line}`);
+  // Clean up platform configs across all 8 platforms -- canonical only.
+  if (isCanonical) {
+    const cleaned = cleanPlatforms();
+    if (cleaned.length > 0) {
+      console.log('  platform configs cleaned:');
+      for (const line of cleaned) console.log(`    ${line}`);
+    }
+  } else {
+    console.log(`  custom-dir uninstall (${target}) -- platform configs in your real home left untouched.`);
   }
 
   console.log('\nIJFW uninstalled. Thanks for trying it.');
