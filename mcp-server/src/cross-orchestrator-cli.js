@@ -883,7 +883,7 @@ async function handleGuide(useBrowser) {
     const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
 <title>IJFW Guide</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@5.5.1/github-markdown-dark.min.css">
-<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <style>
 body{background:#0d1117;color:#c9d1d9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:2rem}
 .markdown-body{max-width:1000px;margin:0 auto;padding:2.5rem 3rem;background:#161b22;border-radius:12px;border:1px solid #30363d}
@@ -900,7 +900,7 @@ const host = document.getElementById('content');
 const range = document.createRange();
 range.selectNodeContents(host);
 host.appendChild(range.createContextualFragment(marked.parse(md)));
-<\/script></body></html>`;
+</script></body></html>`;
     writeFileSync(outFile, html);
     const opener = process.platform === 'darwin' ? 'open'
                  : process.platform === 'win32'  ? 'start'
