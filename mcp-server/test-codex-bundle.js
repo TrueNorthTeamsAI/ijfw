@@ -35,24 +35,37 @@ test('codex: plugin.json skills_dir resolves to existing directory', () => {
 
 // ---- hooks.json -------------------------------------------------------------
 
+// Codex CLI 0.120+ schema (per codex-rs/hooks/src/engine/config.rs):
+//   { "hooks": { EventName: [ { matcher?, hooks: [{type:"command", command, ...}] } ] } }
+// Valid events: SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop, PermissionRequest.
 test('codex: hooks.json is valid JSON with expected events', () => {
   const p = join(CODEX, '.codex', 'hooks.json');
   assert.ok(existsSync(p), 'hooks.json missing');
   const obj = JSON.parse(readFileSync(p, 'utf8'));
-  assert.ok(Array.isArray(obj.hooks), 'hooks.json: top-level "hooks" must be an array');
-  const events = obj.hooks.map(h => h.event);
+  assert.ok(obj && typeof obj === 'object' && !Array.isArray(obj),
+    'hooks.json: top-level must be an object');
+  assert.ok(obj.hooks && typeof obj.hooks === 'object' && !Array.isArray(obj.hooks),
+    'hooks.json: "hooks" must be a map keyed by event name');
   for (const expected of ['SessionStart', 'Stop', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse']) {
-    assert.ok(events.includes(expected), `hooks.json missing event: ${expected}`);
+    assert.ok(Array.isArray(obj.hooks[expected]),
+      `hooks.json event missing or not an array: ${expected}`);
+    assert.ok(obj.hooks[expected].length > 0,
+      `hooks.json event ${expected} has no MatcherGroups`);
   }
 });
 
 test('codex: all hook scripts listed in hooks.json exist on disk', () => {
   const hooksBase = join(CODEX, '.codex');
   const obj = JSON.parse(readFileSync(join(hooksBase, 'hooks.json'), 'utf8'));
-  for (const hook of obj.hooks) {
-    if (hook.script) {
-      const abs = join(hooksBase, hook.script);
-      assert.ok(existsSync(abs), `hook script missing: ${hook.script}`);
+  for (const event of Object.keys(obj.hooks || {})) {
+    for (const group of obj.hooks[event]) {
+      if (!group || !Array.isArray(group.hooks)) continue;
+      for (const h of group.hooks) {
+        if (h && h.type === 'command' && typeof h.command === 'string') {
+          const abs = join(hooksBase, h.command);
+          assert.ok(existsSync(abs), `hook command missing: ${h.command} (event ${event})`);
+        }
+      }
     }
   }
 });
