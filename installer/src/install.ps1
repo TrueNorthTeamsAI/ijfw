@@ -15,8 +15,7 @@ param(
   [string]$Dir = "",
   [string]$Branch = "main",
   [switch]$NoMarketplace,
-  [switch]$Yes,
-  [switch]$Purge
+  [switch]$Yes
 )
 
 $ErrorActionPreference = "Stop"
@@ -263,7 +262,7 @@ $target = Get-Target
 
 # scripts/install.sh owns the summary (Live now / Standing by / next step).
 # Keep clone/pull output suppressed so the final banner reads clean.
-$action = Invoke-CloneOrPull $target $Branch | Out-Null
+Invoke-CloneOrPull $target $Branch | Out-Null
 
 Invoke-InstallScript $target
 
