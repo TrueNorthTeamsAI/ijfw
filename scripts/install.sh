@@ -1090,7 +1090,12 @@ printf '\n  Post-install verification\n  ─────────────
 POST_OK=1
 
 # Gate 1: plugin link resolves to a valid manifest.
-if [ -f "$PLUGIN_DST/.claude-plugin/plugin.json" ]; then
+# Skipped for custom-dir installs (IJFW_CUSTOM_DIR=1) since the sibling link at
+# $HOME/.ijfw/claude is intentionally not created -- checking it would always
+# false-fail and exit 1 on a perfectly-good scratch install.
+if [ "$IJFW_CUSTOM_DIR" = "1" ]; then
+  printf '  %s[+]%s Custom-dir install -- canonical plugin-manifest check skipped (by design).\n' "$C_GREEN" "$C_RESET"
+elif [ -f "$PLUGIN_DST/.claude-plugin/plugin.json" ]; then
   printf '  %s[+]%s Plugin manifest reachable at %s\n' "$C_GREEN" "$C_RESET" "$PLUGIN_DST"
 else
   printf '  %s[!]%s Plugin manifest NOT reachable at %s/.claude-plugin/plugin.json\n' "$C_RED" "$C_RESET" "$PLUGIN_DST"
@@ -1108,7 +1113,11 @@ else
   printf '  %s[!]%s server.js NOT readable at %s\n' "$C_RED" "$C_RESET" "$SERVER_JS"
   POST_OK=0
 fi
-if [ -f "$PLUGIN_SERVER_JS" ] && [ -r "$PLUGIN_SERVER_JS" ]; then
+# Plugin sibling link check is only meaningful for canonical installs. Custom-dir
+# installs intentionally skip the $HOME/.ijfw/mcp-server sibling link creation.
+if [ "$IJFW_CUSTOM_DIR" = "1" ]; then
+  printf '  %s[+]%s Custom-dir install -- canonical plugin-sibling check skipped (by design).\n' "$C_GREEN" "$C_RESET"
+elif [ -f "$PLUGIN_SERVER_JS" ] && [ -r "$PLUGIN_SERVER_JS" ]; then
   printf '  %s[+]%s Plugin sibling link resolves: %s\n' "$C_GREEN" "$C_RESET" "$PLUGIN_SERVER_JS"
 else
   printf '  %s[!]%s Plugin sibling path unreachable: %s (plugin MCP spawn will fail)\n' "$C_RED" "$C_RESET" "$PLUGIN_SERVER_JS"
@@ -1144,8 +1153,11 @@ else
 fi
 
 # Gate 4: settings.json has ijfw-memory registered with a command we can verify.
+# Skipped for custom-dir installs -- we intentionally don't touch ~/.claude/settings.json.
 CLAUDE_SETTINGS="$HOME/.claude/settings.json"
-if [ -f "$CLAUDE_SETTINGS" ]; then
+if [ "$IJFW_CUSTOM_DIR" = "1" ]; then
+  printf '  %s[+]%s Custom-dir install -- canonical settings.json check skipped (by design).\n' "$C_GREEN" "$C_RESET"
+elif [ -f "$CLAUDE_SETTINGS" ]; then
   SETTINGS_CHECK=$(
     "$NODE_BIN" -e '
       const fs = require("fs");
