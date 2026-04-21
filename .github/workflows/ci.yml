@@ -60,7 +60,7 @@ jobs:
       - name: Run PSScriptAnalyzer
         shell: pwsh
         run: |
-          $results = Invoke-ScriptAnalyzer -Path installer/ -Recurse -Severity Warning
+          $results = Invoke-ScriptAnalyzer -Path installer/ -Recurse -Settings installer/PSScriptAnalyzerSettings.psd1
           if ($results) {
             $results | Format-Table -AutoSize
             exit 1
