@@ -8,7 +8,7 @@
 // Zero external deps. Parse argv manually.
 
 import { readFileSync, existsSync, writeFileSync, mkdirSync, statSync, openSync, readSync, closeSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { join, dirname, basename, isAbsolute, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -981,11 +981,12 @@ host.appendChild(range.createContextualFragment(marked.parse(md)));
 // Only dispatch when run directly. When imported as a module (e.g. by tests),
 // skip the CLI entry so the test runner can use exported helpers.
 
+// pathToFileURL normalizes both Windows drive paths (C:\...) and MSYS-style
+// paths (/c/...) into the same file:///C:/... form that import.meta.url uses,
+// so this comparison works on Git Bash / MINGW64 as well as POSIX shells.
 const isMainModule = (() => {
   try {
-    return import.meta.url === `file://${process.argv[1]}`
-      || import.meta.url === `file://${fileURLToPath(import.meta.url)}`
-      && process.argv[1] === fileURLToPath(import.meta.url);
+    return import.meta.url === pathToFileURL(process.argv[1]).href;
   } catch {
     return false;
   }
