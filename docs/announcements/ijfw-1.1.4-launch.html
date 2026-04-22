@@ -45,7 +45,7 @@ const md = `# IJFW 1.1.4 launch -- polished post (V3, compounding-levers framing
 
 ---
 
-## LONG VERSION — launch post
+## LONG VERSION  -  launch post
 
 Your AI is brilliant. It's also forgetful, undisciplined, alone, and quietly burning tokens you never needed to spend.
 
@@ -106,7 +106,7 @@ Grab it. Star the repo so the next person finds it. Drop a 🐐 in the comments 
 
 ---
 
-## SHORT VERSION — X / Twitter thread
+## SHORT VERSION  -  X / Twitter thread
 
 **1/ (hook)**
 
@@ -165,7 +165,7 @@ https://github.com/TheRealSeanDonahoe/ijfw
 
 ---
 
-## HN VERSION — single comment-box submission
+## HN VERSION  -  single comment-box submission
 
 **IJFW: a local orchestration layer that shares memory, routes models, and cross-audits across 8 AI coding CLIs**
 
@@ -257,7 +257,7 @@ headings.forEach((h2, idx) => {
     const clone = sectionWrap.cloneNode(true);
     clone.querySelectorAll('.copy-btn, .code-copy').forEach(b => b.remove());
     navigator.clipboard.writeText(clone.innerText.trim()).then(() => {
-      copyBtn.textContent = '✓ Copied';
+      copyBtn.textContent = '[ok] Copied';
       copyBtn.classList.add('copied');
       setTimeout(() => { copyBtn.textContent = 'Copy section'; copyBtn.classList.remove('copied'); }, 1500);
     });
@@ -279,7 +279,7 @@ headings.forEach((h2, idx) => {
   tocLinks.push({ id, title: h2.textContent });
 });
 // Build TOC
-document.getElementById('toc').innerHTML = tocLinks.map(l => '<a href="#' + l.id + '">' + l.title + '</a>').join(' · ');
+document.getElementById('toc').innerHTML = tocLinks.map(l => '<a href="#' + l.id + '">' + l.title + '</a>').join(' . ');
 
 // Code block copy buttons
 document.querySelectorAll('pre').forEach(pre => {
@@ -288,7 +288,7 @@ document.querySelectorAll('pre').forEach(pre => {
   btn.textContent = 'Copy';
   btn.onclick = () => {
     navigator.clipboard.writeText(pre.querySelector('code').innerText).then(() => {
-      btn.textContent = '✓';
+      btn.textContent = '[ok]';
       setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
     });
   };

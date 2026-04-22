@@ -224,6 +224,17 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
 .dimension{font-size:11px;color:var(--fg-dim);margin-right:8px}
 .finding-detail{margin-top:4px;font-size:12px;color:var(--fg-dim);padding-left:8px}
 .location{font-family:monospace;font-size:11px;margin-top:2px}
+/* Savings ledger tile */
+.savings-ledger-tile{padding:16px 0 0}
+.ledger-headline{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.ledger-spent{font-size:28px;font-weight:700;letter-spacing:-0.5px;color:var(--fg)}
+.ledger-sep{font-size:18px;color:var(--fg-dim)}
+.ledger-without{font-size:16px;color:var(--fg-dim)}
+.ledger-saved{font-size:20px;font-weight:700;color:var(--success);margin-left:4px}
+.ledger-breakdown{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--fg-dim);margin-bottom:12px;padding:8px 12px;background:var(--surface);border-radius:var(--radius-sm);border:1px solid var(--border)}
+.ledger-breakdown span{white-space:nowrap}
+.ledger-methodology-toggle{font-size:11px;color:var(--accent);padding:0;background:none;border:none;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.ledger-methodology-detail{margin-top:8px;font-size:11px;color:var(--fg-dim);line-height:1.6;padding:10px 12px;background:rgba(242,184,75,0.05);border:1px solid rgba(242,184,75,0.15);border-radius:var(--radius-sm)}
 </style>
 </head>
 <body>
@@ -295,6 +306,13 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
           <div class="hlabel">Smart Routing</div>
           <div class="hval" id="heroSmartRouting">--%</div>
           <div class="hsub" id="heroSmartRoutingSub">of work on efficient models</div>
+        </div>
+      </div>
+
+      <div class="card" id="savingsLedgerCard">
+        <div class="ctitle">Savings from IJFW <span style="font-size:11px;font-weight:400;color:var(--fg-dim);margin-left:8px">30-day estimate vs. running without IJFW</span></div>
+        <div class="savings-ledger-tile" id="savingsLedgerTile">
+          <div style="color:var(--fg-dim);font-size:13px">Loading...</div>
         </div>
       </div>
 
@@ -552,6 +570,7 @@ function platformBadges(hasClaude,hasCodex,hasGemini){
 // ============================
 function render(data){
   renderDashboard(data);
+  renderSavingsLedger(data);
   renderSpend(data);
   renderModels(data);
   renderTrend(data);
@@ -1547,6 +1566,61 @@ function updatePlatformSummary(data){
   if(data.gemini&&data.gemini.projects&&data.gemini.projects.length>0) platforms.push('Gemini');
   var el=document.getElementById('platformSummary');
   if(el) el.textContent=platforms.length+' platform'+(platforms.length!==1?'s':'')+' tracked'+(platforms.length?': '+platforms.join(', '):'');
+}
+
+// SAVINGS LEDGER
+function renderSavingsLedger(data) {
+  var el = document.getElementById('savingsLedgerTile');
+  if (!el) return;
+  var s = data.savingsLedger;
+  if (!s || s.actualCost <= 0) {
+    el.innerHTML = '<div style="color:var(--fg-dim);font-size:13px">No spend data yet. Run sessions to see savings estimates.</div>';
+    return;
+  }
+
+  var levers = s.levers || {};
+  var cacheDisplay = levers.cacheHitRate != null ? Math.round(levers.cacheHitRate * 100) + '%' : '--';
+  var haikuDisplay = levers.haikuRoutingPct != null ? Math.round(levers.haikuRoutingPct * 100) + '%' : '--';
+  var outputDisplay = levers.outputReductionPct != null ? Math.round(levers.outputReductionPct * 100) + '%' : '--';
+  // Hide memory-saves span when 0 -- no value in showing "0 round-trips" on fresh installs.
+  var memSpan = (levers.memorySaves != null && levers.memorySaves > 0)
+    ? '<span>Memory saves: ' + levers.memorySaves + ' tool round-trips</span>'
+    : '';
+
+  var methodId = 'ledger-method';
+  el.innerHTML =
+    '<div class="ledger-headline">' +
+      '<span class="ledger-spent">' + fmt$(s.actualCost) + ' spent</span>' +
+      '<span class="ledger-sep">/</span>' +
+      '<span class="ledger-without">~' + fmt$(s.estimatedWithoutIjfw) + ' without IJFW</span>' +
+      '<span class="ledger-saved">' + fmt$(s.savedAmount) + ' saved (' + s.savedPercent + '%)</span>' +
+    '</div>' +
+    '<div class="ledger-breakdown">' +
+      '<span>Cache hit: ' + cacheDisplay + '</span>' +
+      '<span>Routing: ' + haikuDisplay + ' Haiku</span>' +
+      '<span>Output: -' + outputDisplay + '</span>' +
+      memSpan +
+    '</div>' +
+    '<button class="ledger-methodology-toggle" aria-expanded="false" aria-controls="' + methodId + '" ' +
+      'onclick="toggleLedgerMethod(this,\'' + methodId + '\')">' +
+      'Based on Anthropic pricing + measured output reduction [i]' +
+    '</button>' +
+    '<div class="ledger-methodology-detail" id="' + methodId + '" hidden>' +
+      esc(s.methodologyNote || '') +
+    '</div>';
+}
+
+function toggleLedgerMethod(btn, id) {
+  var detail = document.getElementById(id);
+  if (!detail) return;
+  var expanded = btn.getAttribute('aria-expanded') === 'true';
+  if (expanded) {
+    detail.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+  } else {
+    detail.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+  }
 }
 
 // ============================

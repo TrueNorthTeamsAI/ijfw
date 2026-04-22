@@ -66,7 +66,7 @@ If `ijfw_memory_recall` returns a stored interaction style preference, use it as
 
 ### 0E. Print tier + policy (AFTER tool calls)
 ```
-Reading this as [Deep/Quick/Express] -- [reason]. Say "go deeper" or "just quick" to switch.
+Reading this as [Deep (20-45 min)/Quick (3-5 min)/Express (<1 min)] -- [reason]. Say "go deeper" or "just quick" to switch.
 Second Opinions are on -- I'll check your brief, plan, and build automatically. Say "no reviews" to turn off.
 ```
 

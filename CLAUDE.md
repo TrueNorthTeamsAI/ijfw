@@ -15,7 +15,8 @@ Author: Sean Donahoe
 - `wayland/` -- Wayland CLI WAYLAND.md + MCP registration for ~/.wayland/config.yaml
 - `universal/` -- 15-line paste-anywhere rules file
 - `mcp-server/` -- Cross-platform MCP memory server (Node.js, zero deps)
-- `scripts/e2e-smoke.sh` -- 13-gate end-to-end test harness; must pass before publish
+- `scripts/e2e-smoke.sh` -- end-to-end test harness (30+ gates across 2 modes); must pass before publish
+- `scripts/dashboard/` -- local observability dashboard (`ijfw dashboard start`)
 - `docs/` -- README, DESIGN.md
 
 ## Key Conventions
@@ -26,6 +27,7 @@ Author: Sean Donahoe
 - Startup report: positive framing ONLY. No negatives, no "not found", no diagnostics.
 - Platform rules files: identical core rules, adapted for platform format.
 - All memory storage: plain markdown (hot), SQLite FTS5 (warm), optional vectors (cold).
+- Dashboard (`scripts/dashboard/`) is a Claude-host-first feature: memory/project panels read from `~/.claude/projects/`; cost data aggregates across all platforms (Codeburn, Codex SQLite, Gemini dirs). Non-Claude-only users see populated cost tiles but empty memory panels -- graceful degradation, not a bug. Full platform-agnostic memory surfacing is a future milestone.
 
 ## Design Principles
 1. Rory Sutherland: position as "smarter" not "cheaper". Wow factor.
@@ -36,7 +38,7 @@ Author: Sean Donahoe
 <ijfw-memory>
 Project memory at .ijfw/memory/. Call `ijfw_memory_prelude` for full context.
 
-Last handoff: # Handoff: 2026-04-21 -- IJFW 1.1.2 prep + Codex/Gemini platform repairs
+Last handoff: # Handoff: 2026-04-21 -- IJFW 1.1.4 SHIPPED + next-session roadmap
 ## TLDR (30 seconds)
 </ijfw-memory>
 

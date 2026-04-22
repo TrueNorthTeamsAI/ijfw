@@ -7,7 +7,7 @@
 //
 // Zero external deps. Parse argv manually.
 
-import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync, mkdirSync, statSync, openSync, readSync, closeSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, dirname, basename, isAbsolute, resolve } from 'node:path';
 import { homedir } from 'node:os';
@@ -338,10 +338,10 @@ async function cmdDemo() {
   console.log('Findings:');
   console.log('');
 
-  let _attributed = [];
   if (auditorResults && auditorResults.length === picks.length) {
-    // Per-auditor attribution (U11: read auditorResults pre-merge)
-    _attributed = _printDemoFindings(picks, auditorResults);
+    // Per-auditor attribution (U11: read auditorResults pre-merge). The helper
+    // prints findings as a side effect; its return value is intentionally unused.
+    _printDemoFindings(picks, auditorResults);
   } else {
     // Graceful fallback to merged listing when auditorResults unavailable
     const items = Array.isArray(result.merged) ? result.merged : [];
@@ -441,7 +441,8 @@ function cmdDoctor() {
 
   const rows = [];
   for (const entry of ROSTER) {
-    const _reach = isReachable(entry.id, process.env);
+    // isReachable() is called for its side effects (probe caching); return unused.
+    isReachable(entry.id, process.env);
     const cli = isInstalled(entry.id);
     const apiKey = entry.apiFallback ? process.env[entry.apiFallback.authEnv] : null;
     const apiOk = Boolean(apiKey);
@@ -503,6 +504,56 @@ function cmdPurgeReceipts(projectDir) {
   }
 }
 
+// Fixes issue #6: target path string was sent to auditors verbatim, causing
+// hallucinated findings. If target resolves to a regular file on disk, read
+// its contents (with a size cap) so auditors see real code. Topics, git
+// ranges, and non-existent paths pass through unchanged.
+const TARGET_FILE_SIZE_CAP = 64 * 1024; // 64 KB -- leaves prompt headroom
+
+export function resolveTarget(raw, opts = {}) {
+  const cap = typeof opts.sizeCap === 'number' ? opts.sizeCap : TARGET_FILE_SIZE_CAP;
+  if (typeof raw !== 'string' || !raw) return raw;
+
+  let absPath;
+  try {
+    absPath = isAbsolute(raw) ? raw : resolve(process.cwd(), raw);
+  } catch {
+    return raw;
+  }
+
+  if (!existsSync(absPath)) return raw;
+
+  let stat;
+  try {
+    stat = statSync(absPath);
+  } catch {
+    return raw;
+  }
+
+  if (!stat.isFile()) return raw;
+
+  let contents;
+  try {
+    if (stat.size > cap) {
+      const buf = Buffer.alloc(cap);
+      const fd = openSync(absPath, 'r');
+      try {
+        readSync(fd, buf, 0, cap, 0);
+      } finally {
+        closeSync(fd);
+      }
+      contents = buf.toString('utf8')
+        + `\n\n[... truncated: file is ${stat.size} bytes, showing first ${cap} ...]`;
+    } else {
+      contents = readFileSync(absPath, 'utf8');
+    }
+  } catch {
+    return raw;
+  }
+
+  return `File: ${raw}\n\n${contents}`;
+}
+
 async function cmdCross({ mode, target, only, confirm, expand }) {
   const VALID_MODES = ['audit', 'research', 'critique'];
   if (!mode || !VALID_MODES.includes(mode)) {
@@ -513,6 +564,11 @@ async function cmdCross({ mode, target, only, confirm, expand }) {
     console.error('ijfw cross needs a target -- pass a file path, git range, or topic. Example: ijfw cross audit CLAUDE.md');
     process.exit(1);
   }
+
+  // Issue #6 fix: substitute file contents for path string when target is a
+  // regular file. Keep the raw target for the user-facing echo line.
+  const rawTarget = target;
+  target = resolveTarget(target);
 
   // Polish 6: pre-flight reachability check. If no auditor is wired, give a
   // positive recovery hint instead of bombing through to a runCrossOp error.
@@ -527,7 +583,7 @@ async function cmdCross({ mode, target, only, confirm, expand }) {
   const projectDir = process.cwd();
   const runStamp = new Date().toISOString();
 
-  console.log(`\nijfw cross ${mode} -- target: ${target}`);
+  console.log(`\nijfw cross ${mode} -- target: ${rawTarget}`);
   console.log('Probing roster...');
 
   let result;
@@ -922,49 +978,63 @@ host.appendChild(range.createContextualFragment(marked.parse(md)));
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
+// Only dispatch when run directly. When imported as a module (e.g. by tests),
+// skip the CLI entry so the test runner can use exported helpers.
 
-const parsed = parseArgs(process.argv);
+const isMainModule = (() => {
+  try {
+    return import.meta.url === `file://${process.argv[1]}`
+      || import.meta.url === `file://${fileURLToPath(import.meta.url)}`
+      && process.argv[1] === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+})();
 
-if (parsed.cmd === 'guide') {
-  await handleGuide(parsed.browser);
-  process.exit(0);
-}
+if (isMainModule) {
+  const parsed = parseArgs(process.argv);
 
-if (parsed.cmd === 'help') {
-  printUsage();
-  process.exit(0);
-}
+  if (parsed.cmd === 'guide') {
+    await handleGuide(parsed.browser);
+    process.exit(0);
+  }
 
-if (parsed.cmd === 'status') {
-  cmdStatus(process.cwd()).catch(err => { console.error(err.message); process.exit(1); });
-} else if (parsed.cmd === 'demo') {
-  cmdDemo().catch(err => { console.error(err.message); process.exit(1); });
-} else if (parsed.cmd === 'cross') {
-  cmdCross(parsed).catch(err => { console.error(err.message); process.exit(1); });
-} else if (parsed.cmd === 'cross-project-audit') {
-  cmdCrossProjectAudit(parsed).catch(err => { console.error(err.message); process.exit(1); });
-} else if (parsed.cmd === 'import') {
-  cmdImport(parsed).catch(err => { console.error(err.message); process.exit(1); });
-} else if (parsed.cmd === 'doctor') {
-  cmdDoctor();
-} else if (parsed.cmd === 'update') {
-  cmdUpdate();
-} else if (parsed.cmd === 'receipt') {
-  cmdReceipt(parsed.sub);
-} else if (parsed.cmd === 'purge-receipts') {
-  cmdPurgeReceipts(process.cwd());
-} else if (parsed.cmd === 'install') {
-  cmdInstall();
-} else if (parsed.cmd === 'uninstall') {
-  cmdUninstall();
-} else if (parsed.cmd === 'preflight') {
-  cmdPreflight();
-} else if (parsed.cmd === 'dashboard') {
-  cmdDashboard(parsed.sub);
-} else {
-  console.error(`Unknown command: ${parsed.raw}`);
-  printUsage();
-  process.exit(1);
+  if (parsed.cmd === 'help') {
+    printUsage();
+    process.exit(0);
+  }
+
+  if (parsed.cmd === 'status') {
+    cmdStatus(process.cwd()).catch(err => { console.error(err.message); process.exit(1); });
+  } else if (parsed.cmd === 'demo') {
+    cmdDemo().catch(err => { console.error(err.message); process.exit(1); });
+  } else if (parsed.cmd === 'cross') {
+    cmdCross(parsed).catch(err => { console.error(err.message); process.exit(1); });
+  } else if (parsed.cmd === 'cross-project-audit') {
+    cmdCrossProjectAudit(parsed).catch(err => { console.error(err.message); process.exit(1); });
+  } else if (parsed.cmd === 'import') {
+    cmdImport(parsed).catch(err => { console.error(err.message); process.exit(1); });
+  } else if (parsed.cmd === 'doctor') {
+    cmdDoctor();
+  } else if (parsed.cmd === 'update') {
+    cmdUpdate();
+  } else if (parsed.cmd === 'receipt') {
+    cmdReceipt(parsed.sub);
+  } else if (parsed.cmd === 'purge-receipts') {
+    cmdPurgeReceipts(process.cwd());
+  } else if (parsed.cmd === 'install') {
+    cmdInstall();
+  } else if (parsed.cmd === 'uninstall') {
+    cmdUninstall();
+  } else if (parsed.cmd === 'preflight') {
+    cmdPreflight();
+  } else if (parsed.cmd === 'dashboard') {
+    cmdDashboard(parsed.sub);
+  } else {
+    console.error(`Unknown command: ${parsed.raw}`);
+    printUsage();
+    process.exit(1);
+  }
 }
 
 // --- install / uninstall / preflight / dashboard ---

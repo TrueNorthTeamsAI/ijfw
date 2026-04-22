@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.1.5] -- 2026-04-22
+
+### ijfw-design -- three-option picker, cross-platform
+
+- Reads `DESIGN.md` from project root first. If present, it becomes the design contract and the picker is skipped.
+- When absent, presents three options: (1) reference a brand (smart suggestions from brand-atlas, auto-detected from project domain), (2) pick a style (12 curated templates), (3) blank slate (progressive brainstorm).
+- 12 curated DESIGN.md templates in `templates/design/`: swiss-minimal, editorial-warm, terminal-native, cinematic-dark, glassmorphic, brutalist-luxe, maximalist-vibrant, neo-swiss-tech, data-dense-dashboard, warm-organic, bento-grid, magazine-editorial. Each follows the canonical 9-section DESIGN.md spec and is compatible with Claude Design (claude.ai/design).
+- New `brand-atlas.json` -- 12 domains x 3-5 brand suggestions each, with keyword-based domain auto-detection.
+- Cross-platform parity: Claude, Codex, Gemini, Hermes, Wayland all receive the updated SKILL.md + brand-atlas + 12 templates on install. 15 new E2E gates assert picker resources land on every platform.
+- Paths in SKILL.md now skill-relative so the same source works on any install layout.
+
+### Dashboard -- dollar-saved ledger
+
+- Replaces the old 25% efficiency tile with a six-lever ledger: "This week: $X.XX spent / ~$Y.YY without IJFW / $Z.ZZ saved (N%)".
+- Baseline estimated via three multipliers: cache hit rate (vs 25% no-IJFW baseline, since natural conversation has some cache reuse), model routing (Haiku fraction vs all-Sonnet baseline), output discipline (30% fixed midpoint of measured 20-40% range). Composite capped at 5x for defensibility.
+- Inline methodology toggle cites every number's source (Anthropic cache pricing, measured output reduction). Skeptics can trace the math.
+- Graceful handling of zero-data, missing-cache, 100%-Haiku, and negative-cost edge cases (9 cases verified).
+- `memorySaves: 0` row hidden when empty to reduce noise on fresh installs.
+- `journalEntries` (parsed from project-journal.md) now surfaces in `/api/data`.
+
+### ijfw-workflow -- time ranges
+
+- Tier echo line now reads "Deep (20-45 min)/Quick (3-5 min)/Express (<1 min)" for consistency with the README and launch post. Tier detection logic unchanged.
+
+### Fix #6 -- cross audit/critique sends file contents, not path
+
+- `ijfw cross audit <file>` previously sent only the path string to auditors, who hallucinated findings from the filename/extension. Fixed via new `resolveTarget()` helper in `mcp-server/src/cross-orchestrator-cli.js`: if the argument resolves to a regular file on disk, substitutes `File: <path>\n\n<contents>` (64 KB size cap with truncation marker). Topics, git ranges, and non-existent paths pass through unchanged.
+- Reported by @shawnvink. 9 new unit tests cover real file, topic, git range, directory, oversize, relative path, and the regression case directly.
+
+### Reliability + hygiene
+
+- Cleaned up 3 long-standing TypeScript 6133 diagnostics (unused vars in `server.js` and `cross-orchestrator-cli.js`).
+- Banned-char sweep extended to catch U+2013 (en-dash), U+00B7 (middle dot), U+00E8 (`é` in `Hermès`), and other Unicode dividers that slipped past the U+2014 check. Sanitized across all 1.1.4 + 1.1.5 surfaces.
+- E2E smoke added gates for Cursor + Copilot install paths (previously uncovered).
+- New `isMainModule` guard at the CLI entry so `cross-orchestrator-cli.js` can be safely imported by tests.
+
 ## [1.1.0] -- 2026-04-16
 
 ### Preflight pipeline

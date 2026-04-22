@@ -273,6 +273,86 @@ else
   fail "wayland skills not copied"
 fi
 
+# ---- Cursor + Copilot gates (install into project dir = $ISO_HOME/.ijfw) ----
+CURSOR_MCP="$ISO_HOME/.ijfw/.cursor/mcp.json"
+CURSOR_RULES="$ISO_HOME/.ijfw/.cursor/rules/ijfw.mdc"
+if [ -f "$CURSOR_MCP" ] && grep -q 'ijfw-memory' "$CURSOR_MCP"; then
+  pass "cursor .cursor/mcp.json: ijfw-memory registered"
+else
+  fail "cursor .cursor/mcp.json missing or lacks ijfw-memory"
+fi
+if [ -f "$CURSOR_RULES" ]; then
+  pass "cursor .cursor/rules/ijfw.mdc present"
+else
+  fail "cursor .cursor/rules/ijfw.mdc missing"
+fi
+
+COPILOT_MCP="$ISO_HOME/.ijfw/.vscode/mcp.json"
+COPILOT_INST="$ISO_HOME/.ijfw/.github/copilot-instructions.md"
+if [ -f "$COPILOT_MCP" ] && grep -q 'ijfw-memory' "$COPILOT_MCP"; then
+  pass "copilot .vscode/mcp.json: ijfw-memory registered"
+else
+  fail "copilot .vscode/mcp.json missing or lacks ijfw-memory"
+fi
+if [ -f "$COPILOT_INST" ]; then
+  pass "copilot .github/copilot-instructions.md present"
+else
+  fail "copilot .github/copilot-instructions.md missing"
+fi
+
+# ---- Picker-resource gates (1.1.5) ----
+# For each platform that ships ijfw-design, verify the 1.1.5 picker resources
+# landed: SKILL.md contains "Three-Option Picker", data/brand-atlas.json is
+# valid JSON with 12 domains, templates/design/ has 12 .md files.
+check_picker_resources() {
+  local label="$1"
+  local skill_root="$2"
+  if [ ! -d "$skill_root" ]; then
+    fail "$label: skill dir missing at $skill_root"
+    return
+  fi
+  local skill_md="$skill_root/SKILL.md"
+  local atlas="$skill_root/data/brand-atlas.json"
+  local tpl_dir="$skill_root/templates/design"
+  # SKILL.md contains picker logic
+  if [ -f "$skill_md" ] && grep -q "Three-Option Picker" "$skill_md"; then
+    pass "$label: SKILL.md carries 1.1.5 picker"
+  else
+    fail "$label: SKILL.md missing or lacks picker"
+  fi
+  # brand-atlas.json valid + 12 domains
+  if [ -f "$atlas" ] && node -e "const a=JSON.parse(require('fs').readFileSync('$atlas','utf8')); process.exit(Array.isArray(a) && a.length===12 ? 0 : 1)"; then
+    pass "$label: brand-atlas.json valid (12 domains)"
+  else
+    fail "$label: brand-atlas.json missing or malformed"
+  fi
+  # templates/design/ has 12 .md files
+  if [ -d "$tpl_dir" ] && [ "$(find "$tpl_dir" -maxdepth 1 -type f -name '*.md' | wc -l | tr -d ' ')" = "12" ]; then
+    pass "$label: templates/design/ has 12 files"
+  else
+    fail "$label: templates/design/ missing or wrong count"
+  fi
+}
+
+check_picker_resources "claude (repo tree)"  "$REPO_ROOT/claude/skills/ijfw-design"
+check_picker_resources "codex (installed)"   "$ISO_HOME/.codex/skills/ijfw-design"
+check_picker_resources "gemini (installed)"  "$ISO_HOME/.gemini/extensions/ijfw/skills/ijfw-design"
+check_picker_resources "hermes (installed)"  "$ISO_HOME/.hermes/skills/ijfw-design"
+check_picker_resources "wayland (installed)" "$ISO_HOME/.wayland/skills/ijfw-design"
+
+# ---- Issue #6 regression gate ----
+# Verify the installed cross-orchestrator-cli.js ships the resolveTarget fix.
+# Bug: bare path was sent to auditors; fix reads file contents when target is
+# a regular file. See https://github.com/TheRealSeanDonahoe/ijfw/issues/6
+CLI_JS="$ISO_HOME/.ijfw/mcp-server/src/cross-orchestrator-cli.js"
+if [ -f "$CLI_JS" ] \
+   && grep -q "export function resolveTarget" "$CLI_JS" \
+   && grep -q "target = resolveTarget(target)" "$CLI_JS"; then
+  pass "issue #6 fix present: resolveTarget wired into cmdCross"
+else
+  fail "issue #6 regression: resolveTarget missing or not called in cmdCross"
+fi
+
 # ---- MCP server handshake test ----
 info "handshaking with MCP server..."
 SERVER_JS="$ISO_HOME/.ijfw/mcp-server/src/server.js"

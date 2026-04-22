@@ -15,7 +15,7 @@
 
 ---
 
-## LONG VERSION — launch post
+## LONG VERSION  -  launch post
 
 Your AI is brilliant. It's also forgetful, undisciplined, alone, and quietly burning tokens you never needed to spend.
 
@@ -76,7 +76,7 @@ Grab it. Star the repo so the next person finds it. Drop a 🐐 in the comments 
 
 ---
 
-## SHORT VERSION — X / Twitter thread
+## SHORT VERSION  -  X / Twitter thread
 
 **1/ (hook)**
 
@@ -135,7 +135,7 @@ https://github.com/TheRealSeanDonahoe/ijfw
 
 ---
 
-## HN VERSION — single comment-box submission
+## HN VERSION  -  single comment-box submission
 
 **IJFW: a local orchestration layer that shares memory, routes models, and cross-audits across 8 AI coding CLIs**
 

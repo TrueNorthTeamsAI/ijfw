@@ -14,6 +14,8 @@ Eight AI coding agents sharing one local memory that survives every session, eve
   
 An on-demand three-AI critique puts a second lineage in the room so one model's blind spot never reaches production. Tasks dispatched to the right model for the job, output rules that strip the padding, prompt-cache discipline that compounds every session. Your bill goes down while your quality goes up.  
   
+A portable design contract keeps every AI on-brand: drop a `DESIGN.md` in your project root, or pick from 12 curated templates (Claude Design compatible), and the same palette, typography, and component rules carry across every agent on your stack. No more "make it look nice" as a prompt. No more cross-agent drift.  
+  
 **Whatever AI tools you use today, whatever you switch to tomorrow, IJFW makes them work as one brain.** You bring the AI accounts you already use; IJFW adds nothing to pay for, runs entirely on your machine, and keeps every byte local.  
   
 **One command to install. Then your AI starts behaving like a senior partner that's already read the brief. And you start wondering how anyone still works the old way.**
@@ -177,6 +179,8 @@ All blocking gates passed.
 
 Real numbers from one machine's 30-day window: $5.1k today across 5 active sessions, 97% cache efficiency, 2.71B tokens served from cache, $9.4k actual 30-day burn. Measured, not marketing.
 
+**Dollar-saved ledger.** The dashboard's headline tile shows actual spend, estimated spend without IJFW, and savings amount + percentage computed from three levers applied to your real session data: cache hit rate vs a 25% baseline (Anthropic cache reads at ~10% of input pricing), model routing (Haiku fraction vs all-Sonnet baseline), and output discipline (30% measured midpoint of the 20-40% range). Composite capped at 5x for defensibility. Methodology toggle inline -- every number traced to its source. Your numbers, defensible math, zero marketing.
+
 ```bash
 ijfw dashboard start    # bind 127.0.0.1:37891, open browser
 ijfw dashboard status   # show port + observation count
@@ -212,9 +216,9 @@ Three invariants run through every surface.
 
 * * *
 
-## The five engines
+## The six engines
 
-IJFW is not one thing. It is five connected engines under one install.
+IJFW is not one thing. It is six connected engines under one install.
 
 ### 1\. Token economy
 
@@ -295,6 +299,26 @@ Default Trident picks two auditors from different lineages so blind spots do not
 
 Three parallel audits, findings reconciled into a consolidated table with a consensus column, 18 fixes landed by three specialist swarms, every fix validated by the final gauntlet (typecheck + unit + Playwright). One model's blind spot never reaches production alone. The whole thing is in the repo, auditable, reproducible.
 
+### 6\. Design contract
+
+**One `DESIGN.md`, every AI builds on-brand.** Design is now a first-class surface across all eight platforms: Claude Code, Codex, Gemini, Cursor, Windsurf, Copilot, Hermes, and Wayland. Drop a `DESIGN.md` in your project root and every agent reads the same visual contract -- colors, typography, component rules, layout, responsive behavior, do's and don'ts. No more "make it look nice" as a prompt. No more cross-agent drift where Claude ships one aesthetic and Codex ships another.
+
+No `DESIGN.md` yet? Run a design task and `ijfw-design` fires a three-option picker:
+
+1. **Reference a brand.** Say "like Vercel" or "like Balenciaga" and the skill auto-detects your project domain from `package.json`, then suggests brands from a 12-domain brand atlas. 52 curated aesthetics across dev tools, SaaS, AI, fintech, luxury, automotive, and more -- every brand annotated with palette hints, typography hints, and the kind of project it best serves.
+2. **Pick a style.** 12 opinionated DESIGN.md templates: swiss-minimal, editorial-warm, terminal-native, cinematic-dark, glassmorphic, brutalist-luxe, maximalist-vibrant, neo-swiss-tech, data-dense-dashboard, warm-organic, bento-grid, magazine-editorial. Each follows the canonical 9-section spec (Visual Theme, Colors, Typography, Components, Layout, Depth, Do's, Responsive, Agent Prompt Guide). **Compatible with Claude Design (claude.ai/design)** out of the box -- drop the file into a new design system there and it scaffolds a full UI kit in one shot.
+3. **Blank slate.** Progressive one-question-at-a-time brainstorm if you want to design from first principles.
+
+On confirmation, the picker writes `DESIGN.md` to your project root so future sessions skip the picker and go straight to contract-driven builds. Downstream handoff is automatic: if you have `ui-ux-pro-max`, `frontend-design`, or Superpowers installed, `ijfw-design` dispatches to them with the contract already loaded. One design, eight agents, zero drift.
+
+**What this looks like in practice.** A real landing page built from a DESIGN.md contract on a shipping project (Bangkok Big Bike V1):
+
+<p align="center">
+  <img src="docs/guide/assets/design-example-bangkok.jpg" alt="Bangkok Big Bike and Scooter Rental landing page built from an IJFW DESIGN.md contract -- warm editorial aesthetic, bold black display type with gold accent, cinematic mountain hero photography, clean booking widget with pick-up/drop-off/bike-class selectors, Popular Right Now cards, fully-insured + delivery + deposit + damage-grid trust row" width="100%"/>
+</p>
+
+Warm editorial palette, confident display type, real content density, trust signals in the right places. The design contract drove every decision: the gold accent, the type scale, the card rhythm, the booking-widget hierarchy. Every screen that gets added to this project inherits the same rules automatically because every AI on the stack reads from the same `DESIGN.md`.
+
 * * *
 
 ## The 30-second test drive
@@ -337,7 +361,7 @@ Importers in v1.0: `claude-mem` (full, SQLite). `rtk` (metrics-only, opt-in). Mo
     
 -   **9 deterministic bash hooks**: SessionStart (memory injection + welcome-back beat), SessionStart-dashboard (auto-spawn local observability), SessionEnd (token-savings receipt + memory pointer), UserPromptSubmit (vague-prompt detector) + its capture pair, PreToolUse (pattern detection), PostToolUse (output trim + signal capture), PreCompact (session preservation), Observation-capture.
     
--   **20 on-demand skills**: workflow, memory, commit, handoff, review, critique, compress, team setup, debug, cross-audit, design, recall, dashboard, preflight, and more. Hot-loaded when triggered, unloaded when done.
+-   **20 on-demand skills**: workflow, memory, commit, handoff, review, critique, compress, team setup, debug, cross-audit, **design (DESIGN.md picker + 12 templates + 12-domain brand atlas, cross-platform)**, recall, dashboard, preflight, and more. Hot-loaded when triggered, unloaded when done.
     
 
 ### The MCP memory server
@@ -549,6 +573,6 @@ If you ship code with AI, you need this. If you write with AI, run a business wi
 
 * * *
 
-[github.com/TheRealSeanDonahoe/ijfw](https://github.com/TheRealSeanDonahoe/ijfw) | [MIT License](LICENSE) | [Changelog](CHANGELOG.md) | Local-only. No telemetry, no account, no cloud. One install, eight platforms, five engines, three AI families, zero apologies.
+[github.com/TheRealSeanDonahoe/ijfw](https://github.com/TheRealSeanDonahoe/ijfw) | [MIT License](LICENSE) | [Changelog](CHANGELOG.md) | Local-only. No telemetry, no account, no cloud. One install, eight platforms, six engines, three AI families, zero apologies.
 
 **Install it. Inspect it. Fork it. Ship it. It just fucking works.**
